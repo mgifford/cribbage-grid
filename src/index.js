@@ -7,6 +7,301 @@ import Switch from "@material-ui/core/Switch";
 import Typography from '@material-ui/core/Typography';
 import Slider from '@material-ui/core/Slider';
 
+// =========================================================
+// PeerSync – thin wrapper around PeerJS for state syncing
+// =========================================================
+
+class PeerSync {
+  constructor() {
+    this.peer = null;
+    this.conn = null;
+    this.state = {};
+    this._listeners = {};
+    this.isHost = false;
+  }
+
+  host(onReady, onConnect) {
+    this.isHost = true;
+    this.peer = new window.Peer();
+    this.peer.on('open', (id) => onReady(id));
+    this.peer.on('connection', (conn) => {
+      this.conn = conn;
+      conn.on('open', () => {
+        this._setupConn(conn);
+        if (onConnect) onConnect();
+      });
+    });
+    this.peer.on('error', (err) => console.error('PeerJS host error:', err));
+  }
+
+  join(hostId, onConnect) {
+    this.isHost = false;
+    this.peer = new window.Peer();
+    this.peer.on('open', () => {
+      this.conn = this.peer.connect(hostId);
+      this.conn.on('open', () => {
+        this._setupConn(this.conn);
+        if (onConnect) onConnect();
+      });
+    });
+    this.peer.on('error', (err) => console.error('PeerJS join error:', err));
+  }
+
+  _setupConn(conn) {
+    conn.on('data', (data) => {
+      this.state = data;
+      (this._listeners['update'] || []).forEach((cb) => cb(data));
+    });
+    conn.on('close', () => console.log('PeerJS connection closed'));
+  }
+
+  sync() {
+    if (this.conn && this.conn.open && Object.keys(this.state).length > 0) {
+      this.conn.send(this.state);
+    }
+  }
+
+  on(event, callback) {
+    if (!this._listeners[event]) {
+      this._listeners[event] = [];
+    }
+    this._listeners[event].push(callback);
+  }
+
+  /** Register a one-time listener that removes itself after the first call. */
+  once(event, callback) {
+    const wrapper = (data) => {
+      callback(data);
+      this._listeners[event] = (this._listeners[event] || []).filter(
+        (cb) => cb !== wrapper
+      );
+    };
+    this.on(event, wrapper);
+  }
+
+  destroy() {
+    if (this.peer) {
+      this.peer.destroy();
+    }
+  }
+}
+
+// =========================================================
+// MultiplayerLobby – Host / Join overlay UI
+// =========================================================
+
+const overlayStyle = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
+  backgroundColor: 'rgba(0,0,0,0.6)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 1000,
+};
+
+const modalStyle = {
+  backgroundColor: '#fff',
+  padding: '32px 40px',
+  borderRadius: '10px',
+  textAlign: 'center',
+  minWidth: '320px',
+  boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
+};
+
+const btnStyle = {
+  margin: '8px',
+  padding: '10px 24px',
+  fontSize: '16px',
+  cursor: 'pointer',
+  borderRadius: '6px',
+  border: 'none',
+  backgroundColor: '#1976d2',
+  color: '#fff',
+};
+
+const inputStyle = {
+  fontSize: '16px',
+  padding: '8px',
+  width: '100%',
+  marginBottom: '12px',
+  borderRadius: '4px',
+  border: '1px solid #999',
+  boxSizing: 'border-box',
+};
+
+class MultiplayerLobby extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      mode: null,       // 'host' | 'join' | null
+      roomId: '',       // displayed to host
+      joinId: '',       // typed by joiner
+      status: 'idle',  // 'idle' | 'waiting' | 'connecting' | 'error'
+      errorMsg: '',
+    };
+    this._mounted = false;
+    this.peerSync = new PeerSync();
+  }
+
+  componentDidMount() {
+    this._mounted = true;
+  }
+
+  componentWillUnmount() {
+    this._mounted = false;
+  }
+
+  handleHost() {
+    this.setState({ mode: 'host', status: 'waiting' });
+    this.peerSync.host(
+      (id) => {
+        if (this._mounted) this.setState({ roomId: id });
+      },
+      () => {
+        // Joiner has connected – generate and send initial game state
+        const deck = makeDeck();
+        shuffleDeck(deck);
+        let cardLayout = Array.from({ length: 25 }, () => ({ rank: null, suit: null }));
+        cardLayout[12] = deck[0];
+        const gameState = {
+          deck: deck.slice(1),
+          cardLayout,
+          rowTurn: true,
+        };
+        this.peerSync.state = gameState;
+        this.peerSync.sync();
+        if (this._mounted) this.setState({ status: 'connected' });
+        this.props.onConnected(this.peerSync, true, gameState);
+      }
+    );
+  }
+
+  handleJoin() {
+    const hostId = this.state.joinId.trim();
+    if (!hostId) return;
+    this.setState({ status: 'connecting' });
+    this.peerSync.join(hostId, () => {
+      // Connection open – wait for host to send initial state
+      this.peerSync.once('update', (gameState) => {
+        if (this._mounted) this.setState({ status: 'connected' });
+        this.props.onConnected(this.peerSync, false, gameState);
+      });
+    });
+  }
+
+  handleCancel() {
+    this.peerSync.destroy();
+    this.props.onCancel();
+  }
+
+  render() {
+    const { mode, roomId, joinId, status, errorMsg } = this.state;
+
+    if (status === 'connected') {
+      return (
+        <div style={overlayStyle}>
+          <div style={modalStyle}>
+            <p>Connected! Starting game…</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={overlayStyle}>
+        <div style={modalStyle}>
+          <h2 style={{ marginTop: 0 }}>Multiplayer</h2>
+
+          {!mode && (
+            <>
+              <p>Choose your role:</p>
+              <button style={btnStyle} onClick={() => this.handleHost()}>
+                Host Game
+              </button>
+              <button style={btnStyle} onClick={() => this.setState({ mode: 'join' })}>
+                Join Game
+              </button>
+              <br />
+              <button
+                style={{ ...btnStyle, backgroundColor: '#888', marginTop: '16px' }}
+                onClick={() => this.handleCancel()}
+              >
+                Cancel
+              </button>
+            </>
+          )}
+
+          {mode === 'host' && (
+            <>
+              {roomId ? (
+                <>
+                  <p>Share this Room ID with your opponent:</p>
+                  <p
+                    style={{
+                      fontSize: '22px',
+                      fontWeight: 'bold',
+                      letterSpacing: '2px',
+                      backgroundColor: '#f0f0f0',
+                      padding: '10px',
+                      borderRadius: '4px',
+                    }}
+                  >
+                    {roomId}
+                  </p>
+                </>
+              ) : (
+                <p>Generating Room ID…</p>
+              )}
+              <p style={{ color: '#555' }}>Waiting for opponent to connect…</p>
+              <button
+                style={{ ...btnStyle, backgroundColor: '#888' }}
+                onClick={() => this.handleCancel()}
+              >
+                Cancel
+              </button>
+            </>
+          )}
+
+          {mode === 'join' && (
+            <>
+              <p>Enter the Room ID from the host:</p>
+              <input
+                style={inputStyle}
+                type="text"
+                placeholder="Room ID"
+                value={joinId}
+                onChange={(e) => this.setState({ joinId: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') this.handleJoin();
+                }}
+              />
+              <br />
+              <button
+                style={btnStyle}
+                onClick={() => this.handleJoin()}
+                disabled={status === 'connecting'}
+              >
+                {status === 'connecting' ? 'Connecting…' : 'Connect'}
+              </button>
+              <button
+                style={{ ...btnStyle, backgroundColor: '#888' }}
+                onClick={() => this.handleCancel()}
+              >
+                Cancel
+              </button>
+              {errorMsg && <p style={{ color: 'red' }}>{errorMsg}</p>}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+}
+
 class Deck extends React.Component {
   render() {
     const src = this.props.isEmpty? "cards/blank_card.svg" : "cards/astronaut.svg";
@@ -235,26 +530,58 @@ class CardGrid extends React.Component {
 class CribbageGame extends React.Component {
   constructor(props) {
     super(props);
-    const deck = makeDeck();
-    shuffleDeck(deck);
 
-    // fill center card
-    let cl = Array(25).fill({rank: null, suit: null});
-    cl[12] = deck[0];
+    if (props.initialGameState) {
+      // Multiplayer: use the shared initial state provided by the host
+      this.state = {
+        deck: props.initialGameState.deck,
+        cardLayout: props.initialGameState.cardLayout,
+        rowTurn: props.initialGameState.rowTurn,
+        cpuEnabled: false,
+        cpuLevel: 5,
+      };
+    } else {
+      const deck = makeDeck();
+      shuffleDeck(deck);
 
-    // Check who should start.
-    let rowTurn = true;
+      // fill center card
+      let cl = Array(25).fill({rank: null, suit: null});
+      cl[12] = deck[0];
 
-    this.state = {
-      deck: deck.slice(1, deck.length), 
-      cardLayout: cl,
-      rowTurn: rowTurn,
-      cpuEnabled: true,
-      cpuLevel: 5
-    };
+      this.state = {
+        deck: deck.slice(1, deck.length),
+        cardLayout: cl,
+        rowTurn: true,
+        cpuEnabled: !props.peerSync, // disable CPU in multiplayer
+        cpuLevel: 5,
+      };
+    }
+  }
+
+  componentDidMount() {
+    if (this.props.peerSync) {
+      // Listen for remote state updates and re-render
+      this.props.peerSync.on('update', (newState) => {
+        this.setState({
+          deck: newState.deck,
+          cardLayout: newState.cardLayout,
+          rowTurn: newState.rowTurn,
+        });
+      });
+    }
+  }
+
+  /** Returns true when it is the local player's turn (multiplayer only). */
+  isMyTurn() {
+    return this.props.isHost ? this.state.rowTurn : !this.state.rowTurn;
   }
 
   resetGame() {
+    // In multiplayer, only the host can reset (start a new round)
+    if (this.props.peerSync && !this.props.isHost) {
+      return;
+    }
+
     let deck = makeDeck();
     shuffleDeck(deck);
 
@@ -265,16 +592,19 @@ class CribbageGame extends React.Component {
 
     const newRowTurn = !(this.state.rowTurn);
 
-    // call cpu here if it needs to make a move still.
-    if (!newRowTurn && this.state.cpuEnabled) {
+    // call cpu here if it needs to make a move still (single-player only).
+    if (!this.props.peerSync && !newRowTurn && this.state.cpuEnabled) {
       setTimeout(()=> this.cpuMoveHandler(cl, deck[0]), 3000);
     }
 
-    this.setState({
-      deck: deck, 
-      cardLayout: cl,
-      rowTurn: newRowTurn
-    });
+    const newState = { deck, cardLayout: cl, rowTurn: newRowTurn };
+
+    if (this.props.peerSync) {
+      this.props.peerSync.state = newState;
+      this.props.peerSync.sync();
+    }
+
+    this.setState(newState);
   }
 
   handleGridClick(i) {
@@ -282,21 +612,35 @@ class CribbageGame extends React.Component {
     if(this.state.cardLayout[i].rank && this.state.cardLayout[i].suit) {
       return;
     }
+
+    // Multiplayer turn enforcement: host plays rows, joiner plays columns
+    if (this.props.peerSync) {
+      if (!this.isMyTurn()) return;
+    }
+
     const newLayout = this.state.cardLayout.slice()
     newLayout[i] = this.state.deck[0];
     const newDeck = this.state.deck.slice(1, this.state.deck.length);
     const newRowTurn = !(this.state.rowTurn);
 
-    // call cpu here if it needs to make a move still.
-    if (newDeck.length > 27 && !newRowTurn && this.state.cpuEnabled) {
+    // call cpu here if it needs to make a move still (single-player only).
+    if (!this.props.peerSync && newDeck.length > 27 && !newRowTurn && this.state.cpuEnabled) {
       setTimeout(()=> this.cpuMoveHandler(newLayout, newDeck[0]), 3000);
     }
 
-    this.setState({
+    const newState = {
       deck: newDeck,
       cardLayout: newLayout,
-      rowTurn: newRowTurn
-    });
+      rowTurn: newRowTurn,
+    };
+
+    // Sync to peer before applying locally so the remote player updates promptly
+    if (this.props.peerSync) {
+      this.props.peerSync.state = newState;
+      this.props.peerSync.sync();
+    }
+
+    this.setState(newState);
   }
 
   cpuMoveHandler(cardLayout, nextCard) {
@@ -315,12 +659,44 @@ class CribbageGame extends React.Component {
 
     if (this.state.deck.length > 27) {
       currentCard = this.state.deck[0];
-      turnText = this.state.rowTurn? "P1's Turn (rows)" : " P2/CPU's Turn (columns)";
+      if (this.props.peerSync) {
+        const myTurn = this.isMyTurn();
+        const role = this.props.isHost ? 'rows' : 'columns';
+        turnText = myTurn
+          ? `Your Turn (${role})`
+          : "Opponent's Turn";
+      } else {
+        turnText = this.state.rowTurn? "P1's Turn (rows)" : " P2/CPU's Turn (columns)";
+      }
     }
     else {
       currentCard = null;
-      turnText = "Round Over - click deck (astronaut) for next round";
+      if (this.props.peerSync) {
+        if (this.props.isHost) {
+          turnText = "Round Over – click deck to start next round";
+        } else {
+          turnText = "Round Over – waiting for host to start next round";
+        }
+      } else {
+        turnText = "Round Over - click deck (astronaut) for next round";
+      }
     }
+
+    const gridClickHandler = (i) => {
+      if (this.props.peerSync) {
+        if (this.isMyTurn()) this.handleGridClick(i);
+      } else {
+        if (this.state.rowTurn || !this.state.cpuEnabled) this.handleGridClick(i);
+      }
+    };
+
+    // In multiplayer, only the host can reset the round
+    const resetClickHandler = (r, c) => {
+      if (!this.props.peerSync || this.props.isHost) {
+        this.resetGame();
+        this.props.resetCallback(r, c);
+      }
+    };
 
     return (
       <div>
@@ -329,36 +705,39 @@ class CribbageGame extends React.Component {
         <CardGrid
           nextCard={currentCard}
           cardLayout={this.state.cardLayout}
-          clickHandler={(i) => {if (this.state.rowTurn || !this.state.cpuEnabled) {this.handleGridClick(i)}}}
-          resetCallback={(r,c) => {this.resetGame(); this.props.resetCallback(r,c)}}
+          clickHandler={gridClickHandler}
+          resetCallback={resetClickHandler}
         />
         <br />
-        <FormControlLabel
-      control={
-        <Switch checked={this.state.cpuEnabled}
-                onChange={() => this.setState({cpuEnabled: !this.state.cpuEnabled})}
-                name="cpuEnableSwitch" />
-      }
-      label="CPU Opponent"
-        />
-        <br />
-        <div style={{width: "200px"}}>
-          <Typography id="discrete-slider" gutterBottom>
-            {"CPU Difficulty"}
-          </Typography>
-          <Slider
-            defaultValue={5}
-            aria-labelledby="discrete-slider"
-            valueLabelDisplay="auto"
-            onChange={(e, v) => this.setState({cpuLevel: v})}
-            step={1}
-            marks
-            min={1}
-            max={10}
-            disabled={!this.state.cpuEnabled}
-          />
-        </div>
-
+        {!this.props.peerSync && (
+          <>
+            <FormControlLabel
+              control={
+                <Switch checked={this.state.cpuEnabled}
+                        onChange={() => this.setState({cpuEnabled: !this.state.cpuEnabled})}
+                        name="cpuEnableSwitch" />
+              }
+              label="CPU Opponent"
+            />
+            <br />
+            <div style={{width: "200px"}}>
+              <Typography id="discrete-slider" gutterBottom>
+                {"CPU Difficulty"}
+              </Typography>
+              <Slider
+                defaultValue={5}
+                aria-labelledby="discrete-slider"
+                valueLabelDisplay="auto"
+                onChange={(e, v) => this.setState({cpuLevel: v})}
+                step={1}
+                marks
+                min={1}
+                max={10}
+                disabled={!this.state.cpuEnabled}
+              />
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -370,7 +749,35 @@ class MultiRoundCribbageGame extends React.Component {
     this.state = {
       rowScoreboard: 0,
       colScoreboard: 0,
+      showMultiplayerLobby: false,
+      peerSync: null,
+      isHost: false,
+      multiplayerInitialState: null,
     }
+  }
+
+  handleMultiplayerConnected(peerSync, isHost, gameState) {
+    this.setState({
+      showMultiplayerLobby: false,
+      peerSync,
+      isHost,
+      multiplayerInitialState: gameState,
+      rowScoreboard: 0,
+      colScoreboard: 0,
+    });
+  }
+
+  exitMultiplayer() {
+    if (this.state.peerSync) {
+      this.state.peerSync.destroy();
+    }
+    this.setState({
+      peerSync: null,
+      isHost: false,
+      multiplayerInitialState: null,
+      rowScoreboard: 0,
+      colScoreboard: 0,
+    });
   }
 
   updateScore(rScore, cScore) {
@@ -398,13 +805,51 @@ class MultiRoundCribbageGame extends React.Component {
 
 
   render() {
-    const rowScoreString = "P1 Score (Row): " + this.state.rowScoreboard;
-    const colScoreString = "P2/CPU Score (Col): " + this.state.colScoreboard;
-    return (<div>
-              <h2>{rowScoreString}</h2>
-              <h2>{colScoreString}</h2>
-              <CribbageGame resetCallback={(r, c) => this.updateScore(r, c)} />
-            </div>);
+    const { showMultiplayerLobby, peerSync, isHost, multiplayerInitialState } = this.state;
+
+    const rowScoreString = peerSync
+      ? (isHost ? "Your Score (Rows): " : "Opponent Score (Rows): ") + this.state.rowScoreboard
+      : "P1 Score (Row): " + this.state.rowScoreboard;
+    const colScoreString = peerSync
+      ? (isHost ? "Opponent Score (Cols): " : "Your Score (Cols): ") + this.state.colScoreboard
+      : "P2/CPU Score (Col): " + this.state.colScoreboard;
+
+    return (
+      <div>
+        {showMultiplayerLobby && (
+          <MultiplayerLobby
+            onConnected={(ps, ih, gs) => this.handleMultiplayerConnected(ps, ih, gs)}
+            onCancel={() => this.setState({ showMultiplayerLobby: false })}
+          />
+        )}
+        <h2>{rowScoreString}</h2>
+        <h2>{colScoreString}</h2>
+        {!peerSync ? (
+          <button
+            style={{ ...btnStyle, marginBottom: '16px' }}
+            onClick={() => this.setState({ showMultiplayerLobby: true })}
+          >
+            🌐 Multiplayer
+          </button>
+        ) : (
+          <button
+            style={{ ...btnStyle, backgroundColor: '#c62828', marginBottom: '16px' }}
+            onClick={() => this.exitMultiplayer()}
+          >
+            Exit Multiplayer
+          </button>
+        )}
+        {/* key forces a clean remount when switching between single-player and
+            multiplayer so the new initial state / peer connection takes effect */}
+        <CribbageGame
+          key={peerSync ? 'multiplayer' : 'singleplayer'}
+          peerSync={peerSync}
+          isHost={isHost}
+          initialGameState={multiplayerInitialState}
+          resetCallback={(r, c) => this.updateScore(r, c)}
+        />
+      </div>
+    );
   }
 }
 
