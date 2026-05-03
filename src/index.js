@@ -7,6 +7,11 @@ import Switch from "@material-ui/core/Switch";
 import Typography from '@material-ui/core/Typography';
 import Slider from '@material-ui/core/Slider';
 
+if (process.env.NODE_ENV !== 'production') {
+  const axe = require('@axe-core/react');
+  axe(React, ReactDOM, 1000);
+}
+
 // =========================================================
 // PeerSync – thin wrapper around PeerJS for state syncing
 // =========================================================
@@ -123,6 +128,11 @@ const btnStyle = {
   color: '#fff',
 };
 
+const cancelBtnStyle = {
+  ...btnStyle,
+  backgroundColor: '#6b6b6b',
+};
+
 const inputStyle = {
   fontSize: '16px',
   padding: '8px',
@@ -212,9 +222,9 @@ class MultiplayerLobby extends React.Component {
     }
 
     return (
-      <div style={overlayStyle}>
+      <div style={overlayStyle} role="dialog" aria-modal="true" aria-labelledby="multiplayer-heading">
         <div style={modalStyle}>
-          <h2 style={{ marginTop: 0 }}>Multiplayer</h2>
+          <h2 id="multiplayer-heading" style={{ marginTop: 0 }}>Multiplayer</h2>
 
           {!mode && (
             <>
@@ -227,7 +237,7 @@ class MultiplayerLobby extends React.Component {
               </button>
               <br />
               <button
-                style={{ ...btnStyle, backgroundColor: '#888', marginTop: '16px' }}
+                style={{ ...cancelBtnStyle, marginTop: '16px' }}
                 onClick={() => this.handleCancel()}
               >
                 Cancel
@@ -258,7 +268,7 @@ class MultiplayerLobby extends React.Component {
               )}
               <p style={{ color: '#555' }}>Waiting for opponent to connect…</p>
               <button
-                style={{ ...btnStyle, backgroundColor: '#888' }}
+                style={cancelBtnStyle}
                 onClick={() => this.handleCancel()}
               >
                 Cancel
@@ -268,11 +278,14 @@ class MultiplayerLobby extends React.Component {
 
           {mode === 'join' && (
             <>
-              <p>Enter the Room ID from the host:</p>
+              <label htmlFor="room-id-input" style={{ display: 'block', marginBottom: '4px', fontWeight: '600' }}>
+                Room ID
+              </label>
               <input
+                id="room-id-input"
                 style={inputStyle}
                 type="text"
-                placeholder="Room ID"
+                placeholder="e.g. abc123"
                 value={joinId}
                 onChange={(e) => this.setState({ joinId: e.target.value })}
                 onKeyDown={(e) => {
@@ -288,7 +301,7 @@ class MultiplayerLobby extends React.Component {
                 {status === 'connecting' ? 'Connecting…' : 'Connect'}
               </button>
               <button
-                style={{ ...btnStyle, backgroundColor: '#888' }}
+                style={cancelBtnStyle}
                 onClick={() => this.handleCancel()}
               >
                 Cancel
@@ -304,13 +317,17 @@ class MultiplayerLobby extends React.Component {
 
 class Deck extends React.Component {
   render() {
-    const src = this.props.isEmpty? "cards/blank_card.svg" : "cards/astronaut.svg";
-    return <img
-              src={src}
-              onClick={() => this.props.clickHandler()}
-              width="50px"
-              alt=""
-            />;
+    const src = this.props.isEmpty ? "cards/blank_card.svg" : "cards/astronaut.svg";
+    const label = this.props.isEmpty ? "Empty deck" : "Start next round";
+    return (
+      <button
+        onClick={() => this.props.clickHandler()}
+        aria-label={label}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+      >
+        <img src={src} width="50px" alt="" aria-hidden="true" />
+      </button>
+    );
   }
 }
 
@@ -332,36 +349,57 @@ function convertCardToUrl(rank, suit) {
 
 
 
-function Card(props) {
+function cardDescription(rank, suit, showBack) {
+  if (showBack) return 'Face-down card';
+  if (rank && suit) {
+    const r = rank.charAt(0).toUpperCase() + rank.slice(1);
+    const s = suit.charAt(0).toUpperCase() + suit.slice(1);
+    return `${r} of ${s}`;
+  }
+  return 'Empty cell';
+}
+
+function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, ...rest }) {
   let location;
-  if (props.showBack) {
+  if (showBack) {
     location = "cards/astronaut.svg";
   }
-  else if (props.rank && props.suit) {
-    location = convertCardToUrl(props.rank, props.suit);
-    
+  else if (rank && suit) {
+    location = convertCardToUrl(rank, suit);
   }
   else {
     location = "cards/blank_card.svg";
   }
 
-  let imgTag;
-  if (props.clickHandler) {
-    imgTag = <img
-              src={location}
-              width="50px"
-              onClick={() => props.clickHandler()}
-              alt=""
-            />;
+  const description = ariaLabel || cardDescription(rank, suit, showBack);
+
+  if (clickHandler) {
+    const handleKey = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        clickHandler();
+      }
+    };
+    return (
+      <div
+        {...rest}
+        role="button"
+        tabIndex={0}
+        aria-label={description}
+        onClick={clickHandler}
+        onKeyDown={handleKey}
+        style={{ display: 'inline-block', cursor: 'pointer' }}
+      >
+        <img src={location} width="50px" alt="" aria-hidden="true" />
+      </div>
+    );
   }
-  else {
-    imgTag = <img
-              src={location}
-              width="50px"
-              alt=""
-            />;
-  }
-  return <div {...props}>{imgTag}</div>;
+
+  return (
+    <div {...rest}>
+      <img src={location} width="50px" alt={description} />
+    </div>
+  );
 }
 
 function FadeCard(props) {
@@ -416,11 +454,16 @@ function shuffleDeck(array) {
 
 class CardGrid extends React.Component {
   renderCard(i) {
+    const row = Math.floor(i / 5) + 1;
+    const col = (i % 5) + 1;
+    const card = this.props.cardLayout[i];
+    const posLabel = `Row ${row}, Column ${col}: ${cardDescription(card.rank, card.suit, false)}`;
     return (
       <FadeCard
-        rank={this.props.cardLayout[i].rank}
-        suit={this.props.cardLayout[i].suit}
+        rank={card.rank}
+        suit={card.suit}
         clickHandler={() => this.props.clickHandler(i)}
+        aria-label={posLabel}
       />
     );
   }
@@ -467,63 +510,81 @@ class CardGrid extends React.Component {
     const columnScoreTotal = columnScores.reduce((x,y)=>x+y, 0);
     const rowScoreTotal = rowScores.reduce((x,y)=>x+y, 0);
 
-
+    // Top header row: [next card / deck] [col scores…] [col total]
     let topRowElements = [];
-    let wholeRows = [];
-    // first row is next card and then the column scores.
     if(this.props.nextCard) {
-      topRowElements.push((<td>
-                            <Card 
-                                rank={this.props.nextCard.rank}
-                                suit={this.props.nextCard.suit}
-                            />
-                          </td>));
+      topRowElements.push(
+        <td key="next-card">
+          <Card
+            rank={this.props.nextCard.rank}
+            suit={this.props.nextCard.suit}
+          />
+        </td>
+      );
     }
     else {
-      topRowElements.push((<td>
-        <Deck 
+      topRowElements.push(
+        <td key="deck">
+          <Deck
             isEmpty={false}
             clickHandler={() => {this.props.resetCallback(rowScoreTotal, columnScoreTotal)}}
-        />
-      </td>));
+          />
+        </td>
+      );
     }
-    for(const colScore of columnScores) {
-      topRowElements.push(<td><span align="center">{colScore}</span></td>);
+    for(let c = 0; c < 5; c++) {
+      topRowElements.push(
+        <th key={`col-score-${c}`} scope="col">
+          <span className="sr-only">{`Column ${c + 1} score: `}</span>
+          <span>{columnScores[c]}</span>
+        </th>
+      );
     }
-    topRowElements.push(<td>
-                          <span
-                            align="center"
-                            style={{fontWeight: 'bold',
-                                    fontSize: 24}}
-                          >
-                            {columnScoreTotal}
-                          </span>
-                        </td>);
-    
-    wholeRows.push(React.createElement("tr", null, ...topRowElements));
+    topRowElements.push(
+      <th key="col-total" scope="col">
+        <span className="sr-only">Column total score: </span>
+        <span style={{fontWeight: 'bold', fontSize: 24}}>{columnScoreTotal}</span>
+      </th>
+    );
 
-    // for other rows, it is the card layout with row score in first column.
-    for (let row = 0 ; row < 5; row++) {
+    // Game rows 1–5
+    let bodyRows = [];
+    for (let row = 0; row < 5; row++) {
       let rowElements = [];
-      rowElements.push(<td><span align="center">{rowScores[row]}</span></td>);
-      for(let cardIndex = 0 ; cardIndex < 5; cardIndex++) {
+      rowElements.push(
+        <th key="row-score" scope="row">
+          <span className="sr-only">{`Row ${row + 1} score: `}</span>
+          <span>{rowScores[row]}</span>
+        </th>
+      );
+      for(let cardIndex = 0; cardIndex < 5; cardIndex++) {
         const ind = cardIndex + 5*row;
-        rowElements.push(<td>{this.renderCard(ind)}</td>);
+        rowElements.push(<td key={`card-${ind}`}>{this.renderCard(ind)}</td>);
       }
-      wholeRows.push(React.createElement("tr", null, ...rowElements));
+      bodyRows.push(<tr key={`row-${row}`}>{rowElements}</tr>);
     }
 
-    wholeRows.push(<tr><td>
-      <span
-        align="center"
-        style={{fontWeight: 'bold',
-                fontSize: 24}}
-      >
-        {rowScoreTotal}
-      </span>
-    </td></tr>);
-
-    return <table>{React.createElement("tbody", null, ...wholeRows)}</table>;
+    return (
+      <table>
+        <caption className="sr-only">
+          Cribbage Grid – 5×5 card grid. P1 scores for rows (left totals); P2/CPU scores for columns (top totals).
+        </caption>
+        <thead>
+          <tr>{topRowElements}</tr>
+        </thead>
+        <tbody>
+          {bodyRows}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>
+              <span className="sr-only">Row total score: </span>
+              <span style={{fontWeight: 'bold', fontSize: 24}}>{rowScoreTotal}</span>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    );
   }
 }
 
@@ -700,6 +761,7 @@ class CribbageGame extends React.Component {
 
     return (
       <div>
+        <div aria-live="polite" aria-atomic="true" className="sr-only">{turnText}</div>
         <h3>{turnText}</h3>
         <br/>
         <CardGrid
@@ -815,40 +877,46 @@ class MultiRoundCribbageGame extends React.Component {
       : "P2/CPU Score (Col): " + this.state.colScoreboard;
 
     return (
-      <div>
-        {showMultiplayerLobby && (
-          <MultiplayerLobby
-            onConnected={(ps, ih, gs) => this.handleMultiplayerConnected(ps, ih, gs)}
-            onCancel={() => this.setState({ showMultiplayerLobby: false })}
+      <>
+        <a href="#main-content" className="skip-link">Skip to main content</a>
+        <header>
+          <h1>Cribbage Grid</h1>
+        </header>
+        <main id="main-content">
+          {showMultiplayerLobby && (
+            <MultiplayerLobby
+              onConnected={(ps, ih, gs) => this.handleMultiplayerConnected(ps, ih, gs)}
+              onCancel={() => this.setState({ showMultiplayerLobby: false })}
+            />
+          )}
+          <h2>{rowScoreString}</h2>
+          <h2>{colScoreString}</h2>
+          {!peerSync ? (
+            <button
+              style={{ ...btnStyle, marginBottom: '16px' }}
+              onClick={() => this.setState({ showMultiplayerLobby: true })}
+            >
+              🌐 Multiplayer
+            </button>
+          ) : (
+            <button
+              style={{ ...btnStyle, backgroundColor: '#c62828', marginBottom: '16px' }}
+              onClick={() => this.exitMultiplayer()}
+            >
+              Exit Multiplayer
+            </button>
+          )}
+          {/* key forces a clean remount when switching between single-player and
+              multiplayer so the new initial state / peer connection takes effect */}
+          <CribbageGame
+            key={peerSync ? 'multiplayer' : 'singleplayer'}
+            peerSync={peerSync}
+            isHost={isHost}
+            initialGameState={multiplayerInitialState}
+            resetCallback={(r, c) => this.updateScore(r, c)}
           />
-        )}
-        <h2>{rowScoreString}</h2>
-        <h2>{colScoreString}</h2>
-        {!peerSync ? (
-          <button
-            style={{ ...btnStyle, marginBottom: '16px' }}
-            onClick={() => this.setState({ showMultiplayerLobby: true })}
-          >
-            🌐 Multiplayer
-          </button>
-        ) : (
-          <button
-            style={{ ...btnStyle, backgroundColor: '#c62828', marginBottom: '16px' }}
-            onClick={() => this.exitMultiplayer()}
-          >
-            Exit Multiplayer
-          </button>
-        )}
-        {/* key forces a clean remount when switching between single-player and
-            multiplayer so the new initial state / peer connection takes effect */}
-        <CribbageGame
-          key={peerSync ? 'multiplayer' : 'singleplayer'}
-          peerSync={peerSync}
-          isHost={isHost}
-          initialGameState={multiplayerInitialState}
-          resetCallback={(r, c) => this.updateScore(r, c)}
-        />
-      </div>
+        </main>
+      </>
     );
   }
 }
