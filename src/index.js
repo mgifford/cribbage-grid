@@ -534,13 +534,15 @@ class CardGrid extends React.Component {
     }
     for(let c = 0; c < 5; c++) {
       topRowElements.push(
-        <th key={`col-score-${c}`} scope="col" aria-label={`Column ${c + 1} score: ${columnScores[c]}`}>
+        <th key={`col-score-${c}`} scope="col">
+          <span className="sr-only">{`Column ${c + 1} score: `}</span>
           <span>{columnScores[c]}</span>
         </th>
       );
     }
     topRowElements.push(
-      <th key="col-total" scope="col" aria-label={`Column total score: ${columnScoreTotal}`}>
+      <th key="col-total" scope="col">
+        <span className="sr-only">Column total score: </span>
         <span style={{fontWeight: 'bold', fontSize: 24}}>{columnScoreTotal}</span>
       </th>
     );
@@ -550,7 +552,8 @@ class CardGrid extends React.Component {
     for (let row = 0; row < 5; row++) {
       let rowElements = [];
       rowElements.push(
-        <th key="row-score" scope="row" aria-label={`Row ${row + 1} score: ${rowScores[row]}`}>
+        <th key="row-score" scope="row">
+          <span className="sr-only">{`Row ${row + 1} score: `}</span>
           <span>{rowScores[row]}</span>
         </th>
       );
@@ -574,7 +577,8 @@ class CardGrid extends React.Component {
         </tbody>
         <tfoot>
           <tr>
-            <td aria-label={`Row total score: ${rowScoreTotal}`}>
+            <td>
+              <span className="sr-only">Row total score: </span>
               <span style={{fontWeight: 'bold', fontSize: 24}}>{rowScoreTotal}</span>
             </td>
           </tr>
