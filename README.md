@@ -12,6 +12,12 @@ Each round of the game consists of filling up the 5x5 grid with cards. At the en
 
 Scoring is as follows. You, the row player, get points for the hands made up of each row of the grid. This is done according to standard cribbage rules. The CPU opponent gets points for each column of the grid. These hand totals are shown next to each row and column as the game progresses, and the large bold numbers show the totals for all rows (bottom left) and for all columns (top right).
 
+## Multiplayer
+
+Click the **🌐 Multiplayer** button to play against a friend on a separate device. One player hosts and shares their Room ID; the other joins with that ID. No account or login is needed.
+
+Multiplayer is powered by [PeerJS](https://peerjs.com/), which uses WebRTC to send game data directly between the two browsers. Two devices on the same Wi-Fi network, mobile hotspot, or even a wired connection can play together **without a public internet connection**. See [docs/peerjs-local-multiplayer.md](docs/peerjs-local-multiplayer.md) for details, including how to run a fully offline self-hosted signaling server.
+
 ## Cribbage Scoring
 
 Hands can score points in different ways. The total points for a hand is equal to the sum of the points that it scores for pairs, fifteens, runs, and flush.
