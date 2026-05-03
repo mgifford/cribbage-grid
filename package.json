@@ -2,6 +2,7 @@
   "name": "cribbage-grid",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://mgifford.github.io/cribbage-grid",
   "dependencies": {
     "@material-ui/core": "^4.11.2",
     "@testing-library/jest-dom": "^5.11.6",
@@ -39,6 +40,7 @@
     ]
   },
   "devDependencies": {
+    "@axe-core/react": "^4.11.3",
     "gh-pages": "^3.1.0"
   }
 }
