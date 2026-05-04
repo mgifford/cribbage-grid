@@ -999,12 +999,13 @@ function scoreFlush(hand) {
   if (hand.length < 5) {
     return 0;
   }
-  // Count how many cards share the same suit; score 5 if any suit appears 5+ times.
+  // Count how many cards share the same suit (skip blanks); score 5 if any suit appears 5+ times.
   const suitCounts = {};
   for (const card of hand) {
+    if (!card.suit) continue;
     suitCounts[card.suit] = (suitCounts[card.suit] || 0) + 1;
   }
-  if (Math.max(...Object.values(suitCounts)) >= 5) {
+  if (Object.values(suitCounts).length > 0 && Math.max(...Object.values(suitCounts)) >= 5) {
     return 5;
   }
   return 0;
@@ -1111,7 +1112,7 @@ function getCardRatings(subset) {
     return cardRatings["0"];
   }
   if (realCards.length >= 5) {
-    // For full or over-size rows, use the actual score.
+    // Row is fully scored (5 or more real cards); compute the actual cribbage score.
     return scoreHand(realCards);
   }
   // For 1–4 cards, use the pre-computed lookup table.
@@ -1122,7 +1123,12 @@ function getCardRatings(subset) {
     handId *= 14;
     handId += n;
   }
-  return cardRatings[String(handId)] || 0;
+  const rating = cardRatings[String(handId)];
+  if (rating === undefined) {
+    console.warn(`getCardRatings: no entry in cardRatings for handId ${handId}`);
+    return 0;
+  }
+  return rating;
 }
 
 function getRowRating(array2d, rowInd) {
