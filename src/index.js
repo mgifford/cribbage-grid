@@ -161,10 +161,11 @@ const inputStyle = {
 // =========================================================
 
 function GameSetupScreen({ onStart }) {
+  const [gameMode, setGameMode] = useState('cribbage');
   const [p1Type, setP1Type] = useState('human');
   const [p1Name, setP1Name] = useState('Player 1');
   const [p1Level, setP1Level] = useState(5);
-  const [p2Type, setP2Type] = useState('cpu');
+  const [p2Type, setP2Type] = useState('human');
   const [p2Name, setP2Name] = useState('Player 2');
   const [p2Level, setP2Level] = useState(5);
 
@@ -173,7 +174,7 @@ function GameSetupScreen({ onStart }) {
       { type: p1Type, name: p1Type === 'cpu' ? 'CPU' : p1Name, cpuLevel: p1Level, role: 'rows' },
       { type: p2Type, name: p2Type === 'cpu' ? 'CPU' : p2Name, cpuLevel: p2Level, role: 'cols' },
     ];
-    onStart(players);
+    onStart(players, gameMode);
   }
 
   const sectionStyle = {
@@ -190,9 +191,36 @@ function GameSetupScreen({ onStart }) {
       <div style={modalStyle}>
         <h2 id="setup-heading" style={{ marginTop: 0 }}>Game Setup</h2>
 
+        {/* Game Mode */}
+        <div style={sectionStyle}>
+          <span style={labelStyle}>Game Mode</span>
+          <div style={{ marginBottom: '4px' }}>
+            <label>
+              <input
+                type="radio" value="cribbage" checked={gameMode === 'cribbage'}
+                onChange={() => setGameMode('cribbage')}
+              />
+              {' '}Cribbage Grid
+            </label>
+            {'  '}
+            <label>
+              <input
+                type="radio" value="runwabble" checked={gameMode === 'runwabble'}
+                onChange={() => setGameMode('runwabble')}
+              />
+              {' '}Runwabble
+            </label>
+          </div>
+          {gameMode === 'runwabble' && (
+            <p style={{ fontSize: '12px', color: '#555', margin: '4px 0 0' }}>
+              14×14 tile grid. Place 1-5 tiles per turn in a straight line, interlocking with existing tiles. Score 15s, runs, sets & color flush bonuses.
+            </p>
+          )}
+        </div>
+
         {/* P1 */}
         <div style={sectionStyle}>
-          <span style={labelStyle}>Player 1 – Rows</span>
+          <span style={labelStyle}>{gameMode === 'runwabble' ? 'Player 1' : 'Player 1 – Rows'}</span>
           <div style={{ marginBottom: '8px' }}>
             <label>
               <input
@@ -232,7 +260,7 @@ function GameSetupScreen({ onStart }) {
 
         {/* P2 */}
         <div style={sectionStyle}>
-          <span style={labelStyle}>Player 2 – Columns</span>
+          <span style={labelStyle}>{gameMode === 'runwabble' ? 'Player 2' : 'Player 2 – Columns'}</span>
           <div style={{ marginBottom: '8px' }}>
             <label>
               <input
@@ -1255,6 +1283,7 @@ class MultiRoundCribbageGame extends React.Component {
       multiplayerInitialState: null,
       localName: '',
       players: null,       // null = show setup screen
+      gameMode: 'cribbage', // 'cribbage' or 'runwabble'
       gameKey: 0,          // bump to force remount of CribbageGame
     };
   }
@@ -1288,8 +1317,8 @@ class MultiRoundCribbageGame extends React.Component {
     });
   }
 
-  handleSetupStart(players) {
-    this.setState({ players, gameKey: this.state.gameKey + 1 });
+  handleSetupStart(players, gameMode) {
+    this.setState({ players, gameMode: gameMode || 'cribbage', gameKey: this.state.gameKey + 1 });
   }
 
   updateScore(rScore, cScore) {
@@ -1332,7 +1361,7 @@ class MultiRoundCribbageGame extends React.Component {
 
   render() {
     const { showMultiplayerLobby, peerSync, isHost, multiplayerInitialState,
-            autoJoinId, localName, players, gameKey } = this.state;
+            autoJoinId, localName, players, gameKey, gameMode } = this.state;
 
     const p1Name = players ? players[0].name : (peerSync
       ? (isHost
@@ -1345,12 +1374,18 @@ class MultiRoundCribbageGame extends React.Component {
           : (multiplayerInitialState && multiplayerInitialState.p1Name) || 'Host')
       : 'P2/CPU');
 
+    const isRunwabble = gameMode === 'runwabble' && !peerSync;
+
     const rowScoreString = peerSync
       ? `${isHost ? 'Your' : "Opponent's"} Score (Rows – ${p1Name}): ${this.state.rowScoreboard}`
-      : `${p1Name} Score (Rows): ${this.state.rowScoreboard}`;
+      : isRunwabble
+        ? `${p1Name}: ${this.state.rowScoreboard} pts`
+        : `${p1Name} Score (Rows): ${this.state.rowScoreboard}`;
     const colScoreString = peerSync
       ? `${isHost ? "Opponent's" : 'Your'} Score (Cols – ${p2Name}): ${this.state.colScoreboard}`
-      : `${p2Name} Score (Cols): ${this.state.colScoreboard}`;
+      : isRunwabble
+        ? `${p2Name}: ${this.state.colScoreboard} pts`
+        : `${p2Name} Score (Cols): ${this.state.colScoreboard}`;
 
     // Game type label
     let gameTypeLabel = '';
@@ -1358,16 +1393,17 @@ class MultiRoundCribbageGame extends React.Component {
       gameTypeLabel = '2-player game (online)';
     } else if (players) {
       const humanCount = players.filter(p => p.type === 'human').length;
-      if (humanCount === 2) gameTypeLabel = '2-player game (local)';
-      else if (humanCount === 1) gameTypeLabel = '1-player game (vs CPU)';
-      else gameTypeLabel = 'CPU vs CPU';
+      const modeLabel = isRunwabble ? 'Runwabble' : 'Cribbage Grid';
+      if (humanCount === 2) gameTypeLabel = `${modeLabel} – 2-player game (local)`;
+      else if (humanCount === 1) gameTypeLabel = `${modeLabel} – 1-player game (vs CPU)`;
+      else gameTypeLabel = `${modeLabel} – CPU vs CPU`;
     }
 
     return (
       <>
         <a href="#main-content" className="skip-link">Skip to main content</a>
         <header>
-          <h1>Cribbage Grid</h1>
+          <h1>{isRunwabble ? 'Runwabble' : 'Cribbage Grid'}</h1>
           {gameTypeLabel && (
             <p style={{ margin: '0 0 8px', color: '#555', fontSize: '14px' }}>{gameTypeLabel}</p>
           )}
@@ -1384,20 +1420,21 @@ class MultiRoundCribbageGame extends React.Component {
 
           {/* Game setup screen (single-player only, shown before first game or after reset) */}
           {!peerSync && !players && !showMultiplayerLobby && (
-            <GameSetupScreen onStart={(p) => this.handleSetupStart(p)} />
+            <GameSetupScreen onStart={(p, mode) => this.handleSetupStart(p, mode)} />
           )}
 
-          <h2>{rowScoreString}</h2>
-          <h2>{colScoreString}</h2>
+          {!isRunwabble && <h2>{rowScoreString}</h2>}
+          {!isRunwabble && <h2>{colScoreString}</h2>}
 
-          {!peerSync ? (
+          {!peerSync && !isRunwabble && (
             <button
               style={{ ...btnStyle, marginBottom: '16px' }}
               onClick={() => this.setState({ showMultiplayerLobby: true })}
             >
               🌐 Multiplayer
             </button>
-          ) : (
+          )}
+          {peerSync && (
             <button
               style={{ ...btnStyle, backgroundColor: '#c62828', marginBottom: '16px' }}
               onClick={() => this.exitMultiplayer()}
@@ -1415,8 +1452,24 @@ class MultiRoundCribbageGame extends React.Component {
             </button>
           )}
 
-          {/* Only render game when setup is done (single-player) or in multiplayer */}
-          {(players || peerSync) && (
+          {/* Render Runwabble or Cribbage based on mode */}
+          {players && isRunwabble && (
+            <RunwabbleGame
+              key={`runwabble-${gameKey}`}
+              players={players}
+              resetCallback={(p1Score, p2Score) => {
+                this.setState({
+                  rowScoreboard: this.state.rowScoreboard + p1Score,
+                  colScoreboard: this.state.colScoreboard + p2Score,
+                  players: null,
+                  gameKey: gameKey + 1,
+                });
+              }}
+            />
+          )}
+
+          {/* Only render Cribbage game when setup is done (single-player) or in multiplayer */}
+          {(players || peerSync) && !isRunwabble && (
             <CribbageGame
               key={`game-${peerSync ? 'multiplayer' : 'singleplayer'}-${gameKey}`}
               peerSync={peerSync}
@@ -1694,5 +1747,763 @@ function getCpuHandMove(cardLayout, hand, cpuLevel) {
   const alpha = (cpuLevel === 10) ? 10 : Math.max(cpuLevel - 1, 0) / 2.5;
   const probs = softmax(ratings, alpha);
   return allChoices[pickIndex(probs)];
+}
+
+// =========================================================
+// Runwabble – 14×14 tile-grid game mode
+// =========================================================
+
+const RW_GRID = 14;
+const RW_CELLS = RW_GRID * RW_GRID;
+
+/** Create a shuffled bag of 2 standard decks worth of tiles for Runwabble. */
+function makeRunwabbleBag() {
+  const suits = ['clubs', 'diamonds', 'hearts', 'spades'];
+  const ranks = ['ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'jack', 'queen', 'king'];
+  let bag = [];
+  for (let d = 0; d < 2; d++) {
+    for (const s of suits) {
+      for (const r of ranks) {
+        bag.push({ rank: r, suit: s, flipped: false });
+      }
+    }
+  }
+  return bag;
+}
+
+/** Return the effective rank of a tile (6↔9 flip mechanic). */
+function rwEffectiveRank(tile) {
+  if (!tile || !tile.rank) return null;
+  if (tile.rank === '6' && tile.flipped) return '9';
+  if (tile.rank === '9' && tile.flipped) return '6';
+  return tile.rank;
+}
+
+/** Numeric value of a tile for scoring (face/10=10, ace=1, honours 6/9 flip). */
+function rwTileValue(tile) {
+  const rank = rwEffectiveRank(tile);
+  if (!rank) return 0;
+  return Math.min(10, convertRankToNumber(rank));
+}
+
+/**
+ * Score a contiguous Runwabble line (2-5 tiles).
+ * Uses 15s, pairs/sets, runs + 20-point Color Flush bonus (no ordinary 5-pt flush).
+ */
+function scoreRunwabbleLine(tiles) {
+  if (!tiles || tiles.length < 2) return 0;
+  // Apply 6/9 flip to produce effective tiles for scoring
+  const eff = tiles.map(t => ({ ...t, rank: rwEffectiveRank(t) }));
+  let score = 0;
+  score += score15(eff);
+  score += scorePairs(eff);
+  score += scoreRuns(eff);
+  // Color Flush bonus: +20 for 5 same-suit tiles in one line
+  if (eff.length >= 5) {
+    const suitCounts = {};
+    for (const t of eff) {
+      if (t.suit) suitCounts[t.suit] = (suitCounts[t.suit] || 0) + 1;
+    }
+    if (Object.values(suitCounts).length > 0 && Math.max(...Object.values(suitCounts)) >= 5) {
+      score += 20;
+    }
+  }
+  return score;
+}
+
+/**
+ * Find the contiguous horizontal segment in `board` that includes (row, col).
+ * Returns { start, end, tiles } where start/end are column indices.
+ */
+function rwRowSegment(board, row, col) {
+  let start = col, end = col;
+  while (start > 0 && board[row * RW_GRID + start - 1] !== null) start--;
+  while (end < RW_GRID - 1 && board[row * RW_GRID + end + 1] !== null) end++;
+  const tiles = [];
+  for (let c = start; c <= end; c++) tiles.push(board[row * RW_GRID + c]);
+  return { start, end, tiles };
+}
+
+/**
+ * Find the contiguous vertical segment in `board` that includes (row, col).
+ * Returns { start, end, tiles } where start/end are row indices.
+ */
+function rwColSegment(board, row, col) {
+  let start = row, end = row;
+  while (start > 0 && board[(start - 1) * RW_GRID + col] !== null) start--;
+  while (end < RW_GRID - 1 && board[(end + 1) * RW_GRID + col] !== null) end++;
+  const tiles = [];
+  for (let r = start; r <= end; r++) tiles.push(board[r * RW_GRID + col]);
+  return { start, end, tiles };
+}
+
+/**
+ * Validate a proposed Runwabble placement.
+ * @param {Array} board       196-element array (null = empty, object = tile)
+ * @param {Array} cells       Grid indices where tiles will be placed
+ * @param {boolean} firstMovePlayed  Has any move been made yet?
+ * @returns {{ valid: boolean, error?: string, direction?: string }}
+ */
+function validateRunwabblePlacement(board, cells, firstMovePlayed) {
+  if (cells.length === 0) return { valid: false, error: 'Select tiles and cells to place' };
+  if (cells.length > 5) return { valid: false, error: 'Cannot place more than 5 tiles at once' };
+  if (!firstMovePlayed && cells.length < 2) {
+    return { valid: false, error: 'First move must place at least 2 tiles' };
+  }
+  if (new Set(cells).size !== cells.length) {
+    return { valid: false, error: 'Duplicate cells selected' };
+  }
+  for (const cell of cells) {
+    if (board[cell] !== null) return { valid: false, error: 'A selected cell is already occupied' };
+  }
+
+  const positions = cells.map(idx => ({ row: Math.floor(idx / RW_GRID), col: idx % RW_GRID }));
+  const uniqueRows = [...new Set(positions.map(p => p.row))];
+  const uniqueCols = [...new Set(positions.map(p => p.col))];
+
+  let direction;
+  if (cells.length === 1) {
+    direction = 'horizontal';
+  } else if (uniqueRows.length === 1) {
+    direction = 'horizontal';
+  } else if (uniqueCols.length === 1) {
+    direction = 'vertical';
+  } else {
+    return { valid: false, error: 'Tiles must be placed in a straight line' };
+  }
+
+  // Build temp board to check contiguity and length
+  const tmp = board.slice();
+  cells.forEach(c => { tmp[c] = { rank: 'temp', suit: 'temp', flipped: false }; });
+
+  if (direction === 'horizontal') {
+    const row = uniqueRows[0];
+    const sortedCols = positions.map(p => p.col).sort((a, b) => a - b);
+    // No gaps within the new cells range
+    for (let c = sortedCols[0]; c <= sortedCols[sortedCols.length - 1]; c++) {
+      if (tmp[row * RW_GRID + c] === null) {
+        return { valid: false, error: 'Placement creates a gap in the row' };
+      }
+    }
+    const seg = rwRowSegment(tmp, row, sortedCols[0]);
+    if (seg.end - seg.start + 1 > 5) {
+      return { valid: false, error: 'A line cannot exceed 5 tiles' };
+    }
+  } else {
+    const col = uniqueCols[0];
+    const sortedRows = positions.map(p => p.row).sort((a, b) => a - b);
+    for (let r = sortedRows[0]; r <= sortedRows[sortedRows.length - 1]; r++) {
+      if (tmp[r * RW_GRID + col] === null) {
+        return { valid: false, error: 'Placement creates a gap in the column' };
+      }
+    }
+    const seg = rwColSegment(tmp, sortedRows[0], col);
+    if (seg.end - seg.start + 1 > 5) {
+      return { valid: false, error: 'A line cannot exceed 5 tiles' };
+    }
+  }
+
+  // Check perpendicular lines stay ≤ 5
+  for (const cell of cells) {
+    const r = Math.floor(cell / RW_GRID), c = cell % RW_GRID;
+    if (direction === 'horizontal') {
+      const vSeg = rwColSegment(tmp, r, c);
+      if (vSeg.end - vSeg.start + 1 > 5) {
+        return { valid: false, error: 'A perpendicular column would exceed 5 tiles' };
+      }
+    } else {
+      const hSeg = rwRowSegment(tmp, r, c);
+      if (hSeg.end - hSeg.start + 1 > 5) {
+        return { valid: false, error: 'A perpendicular row would exceed 5 tiles' };
+      }
+    }
+  }
+
+  // Must interlock with existing tiles (after first move)
+  if (firstMovePlayed) {
+    const touches = cells.some(cell => {
+      const r = Math.floor(cell / RW_GRID), c = cell % RW_GRID;
+      return (r > 0 && board[(r - 1) * RW_GRID + c] !== null) ||
+             (r < RW_GRID - 1 && board[(r + 1) * RW_GRID + c] !== null) ||
+             (c > 0 && board[r * RW_GRID + c - 1] !== null) ||
+             (c < RW_GRID - 1 && board[r * RW_GRID + c + 1] !== null);
+    });
+    if (!touches) return { valid: false, error: 'Placement must connect to existing tiles' };
+  }
+
+  return { valid: true, direction };
+}
+
+/**
+ * Compute the score gained by placing `tiles` at `cells` on `board`.
+ * Scores all affected contiguous line segments (primary + perpendicular).
+ */
+function scoreRunwabbleMove(board, cells, tiles) {
+  const tmp = board.slice();
+  cells.forEach((cell, i) => { tmp[cell] = tiles[i]; });
+
+  const positions = cells.map(idx => ({ row: Math.floor(idx / RW_GRID), col: idx % RW_GRID }));
+  const uniqueRows = [...new Set(positions.map(p => p.row))];
+  const uniqueCols = [...new Set(positions.map(p => p.col))];
+
+  let total = 0;
+  const scored = new Set();
+
+  const scoreSeg = (key, segTiles) => {
+    if (!scored.has(key) && segTiles.length >= 2) {
+      scored.add(key);
+      total += scoreRunwabbleLine(segTiles);
+    }
+  };
+
+  if (cells.length === 1 || uniqueRows.length === 1) {
+    // Horizontal (or single tile) placement
+    const row = uniqueRows[0];
+    const colList = positions.map(p => p.col);
+    const hSeg = rwRowSegment(tmp, row, colList[0]);
+    scoreSeg(`h-${row}-${hSeg.start}-${hSeg.end}`, hSeg.tiles);
+    for (const col of colList) {
+      const vSeg = rwColSegment(tmp, row, col);
+      scoreSeg(`v-${col}-${vSeg.start}-${vSeg.end}`, vSeg.tiles);
+    }
+  } else {
+    // Vertical placement
+    const col = uniqueCols[0];
+    const rowList = positions.map(p => p.row);
+    const vSeg = rwColSegment(tmp, rowList[0], col);
+    scoreSeg(`v-${col}-${vSeg.start}-${vSeg.end}`, vSeg.tiles);
+    for (const row of rowList) {
+      const hSeg = rwRowSegment(tmp, row, col);
+      scoreSeg(`h-${row}-${hSeg.start}-${hSeg.end}`, hSeg.tiles);
+    }
+  }
+
+  return total;
+}
+
+/** Sum of tile face-values remaining in a hand (used for end-game deduction). */
+function rwHandDeductionValue(hand) {
+  if (!hand) return 0;
+  return hand.reduce((sum, t) => sum + (t && t.rank ? rwTileValue(t) : 0), 0);
+}
+
+// =========================================================
+// RunwabbleBoard – 14×14 grid for Runwabble
+// =========================================================
+
+function RunwabbleBoard({ board, selectedCells, onCellClick }) {
+  const tileSize = 36;
+  const headerCells = [
+    <th key="corner" scope="col" style={{ width: 22 }}></th>,
+  ];
+  for (let c = 0; c < RW_GRID; c++) {
+    headerCells.push(
+      <th
+        key={`h-${c}`}
+        scope="col"
+        style={{ fontSize: '10px', textAlign: 'center', padding: '1px', color: '#888', width: tileSize }}
+      >
+        {c + 1}
+      </th>
+    );
+  }
+
+  const bodyRows = [];
+  for (let r = 0; r < RW_GRID; r++) {
+    const cells = [
+      <th
+        key="rh"
+        scope="row"
+        style={{ fontSize: '10px', padding: '0 2px', color: '#888', textAlign: 'right', width: 22 }}
+      >
+        {r + 1}
+      </th>,
+    ];
+    for (let c = 0; c < RW_GRID; c++) {
+      const idx = r * RW_GRID + c;
+      const tile = board[idx];
+      const isSelected = selectedCells && selectedCells.includes(idx);
+
+      const cellBaseStyle = {
+        width: tileSize,
+        height: tileSize + 8,
+        border: '1px solid #ccc',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxSizing: 'border-box',
+        backgroundColor: isSelected ? '#fff3e0' : '#fafafa',
+        outline: isSelected ? '2px solid #f57c00' : 'none',
+        outlineOffset: '-2px',
+      };
+
+      if (tile) {
+        const displayRank = rwEffectiveRank(tile);
+        const desc = cardDescription(displayRank, tile.suit, false);
+        cells.push(
+          <td key={`c-${c}`} style={{ padding: 0 }}>
+            <div style={cellBaseStyle} aria-label={`Row ${r + 1} Col ${c + 1}: ${desc}`}>
+              <img
+                src={convertCardToUrl(displayRank, tile.suit)}
+                width={tileSize - 4}
+                alt=""
+                aria-hidden="true"
+              />
+            </div>
+          </td>
+        );
+      } else {
+        let label = `Row ${r + 1} Col ${c + 1}: Empty`;
+        if (isSelected) label += ' (selected – click to deselect)';
+        else label += ' – click to select for placement';
+        cells.push(
+          <td key={`c-${c}`} style={{ padding: 0 }}>
+            <div
+              role="button"
+              tabIndex={0}
+              style={{ ...cellBaseStyle, cursor: 'pointer' }}
+              aria-label={label}
+              onClick={() => onCellClick && onCellClick(idx)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onCellClick && onCellClick(idx); }
+              }}
+            >
+              {isSelected && <span style={{ fontSize: 12, color: '#f57c00' }}>●</span>}
+            </div>
+          </td>
+        );
+      }
+    }
+    bodyRows.push(<tr key={`r-${r}`}>{cells}</tr>);
+  }
+
+  return (
+    <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
+      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <caption className="sr-only">Runwabble 14×14 tile grid</caption>
+        <thead><tr>{headerCells}</tr></thead>
+        <tbody>{bodyRows}</tbody>
+      </table>
+    </div>
+  );
+}
+
+// =========================================================
+// RunwabbleHandDisplay – hand with multi-select and 6/9 flip
+// =========================================================
+
+function RunwabbleHandDisplay({ hand, selectedIndices, onCardClick, onFlipClick, label, isActive }) {
+  if (!hand || hand.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        margin: '12px 0',
+        padding: '10px',
+        backgroundColor: isActive ? '#e3f2fd' : '#f5f5f5',
+        borderRadius: '8px',
+        border: isActive ? '2px solid #1976d2' : '1px solid #ccc',
+        display: 'inline-block',
+      }}
+    >
+      <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#444' }}>
+        {label}
+        {isActive && (
+          <span style={{ color: '#1976d2', marginLeft: '8px' }}>
+            ← click tiles to select, then click grid cells
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {hand.map((tile, i) => {
+          if (!tile || !tile.rank) return null;
+          const isSelected = selectedIndices && selectedIndices.includes(i);
+          const displayRank = rwEffectiveRank(tile);
+          const canFlip = tile.rank === '6' || tile.rank === '9';
+          const flipTarget = tile.rank === '6' ? '9' : '6';
+
+          return (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+              <Card
+                rank={displayRank}
+                suit={tile.suit}
+                selected={isSelected}
+                clickHandler={isActive ? () => onCardClick(i) : undefined}
+                aria-label={`${cardDescription(displayRank, tile.suit, false)}${tile.flipped ? ' (flipped)' : ''}${isSelected ? ' (selected)' : ''}`}
+              />
+              {isActive && canFlip && (
+                <button
+                  onClick={() => onFlipClick(i)}
+                  aria-label={`Flip tile: use as ${flipTarget} instead`}
+                  style={{
+                    fontSize: '10px',
+                    padding: '1px 6px',
+                    cursor: 'pointer',
+                    backgroundColor: tile.flipped ? '#ff9800' : '#e0e0e0',
+                    color: tile.flipped ? '#fff' : '#333',
+                    border: 'none',
+                    borderRadius: '3px',
+                  }}
+                >
+                  {tile.rank}↔{flipTarget}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// =========================================================
+// RunwabbleGame – full Runwabble game component
+// =========================================================
+
+class RunwabbleGame extends React.Component {
+  constructor(props) {
+    super(props);
+    const bag = makeRunwabbleBag();
+    shuffleDeck(bag);
+    const p1Hand = bag.splice(0, 5);
+    const p2Hand = bag.splice(0, 5);
+
+    this.state = {
+      board: Array(RW_CELLS).fill(null),
+      bag,
+      p1Hand,
+      p2Hand,
+      currentPlayer: 0,
+      p1Score: 0,
+      p2Score: 0,
+      selectedHandIndices: [],
+      selectedCells: [],
+      firstMovePlayed: false,
+      gameOver: false,
+      lastMoveInfo: '',
+      message: '',
+    };
+  }
+
+  componentDidMount() {
+    const name = this.getPlayerName(0);
+    this.setState({ message: `${name}'s turn: select tiles from your hand, then click cells on the grid` });
+  }
+
+  getPlayerName(idx) {
+    const { players } = this.props;
+    if (players && players[idx]) return players[idx].name;
+    return idx === 0 ? 'Player 1' : 'Player 2';
+  }
+
+  currentHand() {
+    return this.state.currentPlayer === 0 ? this.state.p1Hand : this.state.p2Hand;
+  }
+
+  defaultMessage(nextPlayer) {
+    const name = this.getPlayerName(nextPlayer !== undefined ? nextPlayer : this.state.currentPlayer);
+    return `${name}'s turn: select tiles from your hand, then click cells on the grid`;
+  }
+
+  handleHandClick(i) {
+    if (this.state.gameOver) return;
+    const hand = this.currentHand();
+    if (!hand[i] || !hand[i].rank) return;
+
+    const { selectedHandIndices } = this.state;
+    let next;
+    if (selectedHandIndices.includes(i)) {
+      next = selectedHandIndices.filter(x => x !== i);
+    } else {
+      if (selectedHandIndices.length >= 5) return;
+      next = [...selectedHandIndices, i];
+    }
+    this.setState({ selectedHandIndices: next }, () => this.updateMessage());
+  }
+
+  handleFlipClick(i) {
+    if (this.state.gameOver) return;
+    const { currentPlayer, p1Hand, p2Hand } = this.state;
+    const hand = (currentPlayer === 0 ? p1Hand : p2Hand).slice();
+    hand[i] = { ...hand[i], flipped: !hand[i].flipped };
+    if (currentPlayer === 0) {
+      this.setState({ p1Hand: hand });
+    } else {
+      this.setState({ p2Hand: hand });
+    }
+  }
+
+  handleCellClick(idx) {
+    if (this.state.gameOver) return;
+    if (this.state.board[idx] !== null) return;
+
+    const { selectedHandIndices, selectedCells } = this.state;
+    let next;
+    if (selectedCells.includes(idx)) {
+      next = selectedCells.filter(x => x !== idx);
+    } else {
+      if (selectedCells.length >= Math.max(selectedHandIndices.length, 1)) {
+        // Replace oldest selection
+        next = [...selectedCells.slice(1), idx];
+      } else {
+        next = [...selectedCells, idx];
+      }
+    }
+    this.setState({ selectedCells: next }, () => this.updateMessage());
+  }
+
+  updateMessage() {
+    const { selectedHandIndices, selectedCells, board, firstMovePlayed } = this.state;
+    if (selectedHandIndices.length === 0) {
+      this.setState({ message: this.defaultMessage() });
+      return;
+    }
+    if (selectedCells.length < selectedHandIndices.length) {
+      const need = selectedHandIndices.length - selectedCells.length;
+      this.setState({ message: `Now click ${need} more cell${need > 1 ? 's' : ''} on the grid` });
+      return;
+    }
+    if (selectedCells.length !== selectedHandIndices.length) {
+      this.setState({ message: `Select ${selectedHandIndices.length} cell(s) to match your tile selection` });
+      return;
+    }
+    const result = validateRunwabblePlacement(board, selectedCells, firstMovePlayed);
+    if (!result.valid) {
+      this.setState({ message: `⚠ ${result.error}` });
+    } else {
+      this.setState({ message: 'Ready – click "Confirm Placement" to place your tiles' });
+    }
+  }
+
+  canConfirm() {
+    const { selectedHandIndices, selectedCells, board, firstMovePlayed } = this.state;
+    if (selectedHandIndices.length === 0) return false;
+    if (selectedCells.length !== selectedHandIndices.length) return false;
+    return validateRunwabblePlacement(board, selectedCells, firstMovePlayed).valid;
+  }
+
+  confirmPlacement() {
+    if (!this.canConfirm()) return;
+
+    const {
+      board, bag, p1Hand, p2Hand, currentPlayer,
+      p1Score, p2Score, selectedHandIndices, selectedCells, firstMovePlayed,
+    } = this.state;
+
+    const hand = currentPlayer === 0 ? p1Hand : p2Hand;
+    const placedTiles = selectedHandIndices.map(i => hand[i]);
+
+    // Compute move score
+    let moveScore = scoreRunwabbleMove(board, selectedCells, placedTiles);
+
+    // First-move bonus
+    if (!firstMovePlayed) moveScore += 10;
+
+    // Place tiles
+    const newBoard = board.slice();
+    selectedCells.forEach((cell, i) => { newBoard[cell] = placedTiles[i]; });
+
+    // Remove placed tiles from hand and draw replacements
+    let newBag = bag.slice();
+    let newHand = hand.filter((_, i) => !selectedHandIndices.includes(i));
+
+    // Clear-all-5 bonus
+    const playedAll = selectedHandIndices.length === 5 && hand.length === 5;
+    if (playedAll) moveScore += 10;
+
+    const drawn = newBag.splice(0, Math.min(selectedHandIndices.length, newBag.length));
+    newHand = [...newHand, ...drawn];
+
+    const newP1Hand = currentPlayer === 0 ? newHand : p1Hand;
+    const newP2Hand = currentPlayer === 1 ? newHand : p2Hand;
+    const newP1Score = p1Score + (currentPlayer === 0 ? moveScore : 0);
+    const newP2Score = p2Score + (currentPlayer === 1 ? moveScore : 0);
+
+    // Game over when bag is exhausted AND current player just used their last tile
+    const gameOver = newBag.length === 0 && newHand.length === 0;
+
+    let finalP1Score = newP1Score;
+    let finalP2Score = newP2Score;
+    let gameOverMsg = '';
+
+    if (gameOver) {
+      const ded1 = rwHandDeductionValue(newP1Hand);
+      const ded2 = rwHandDeductionValue(newP2Hand);
+      finalP1Score = newP1Score - ded1;
+      finalP2Score = newP2Score - ded2;
+      const name1 = this.getPlayerName(0);
+      const name2 = this.getPlayerName(1);
+      let winner;
+      if (finalP1Score > finalP2Score) winner = `${name1} wins!`;
+      else if (finalP2Score > finalP1Score) winner = `${name2} wins!`;
+      else winner = 'Tie game!';
+      gameOverMsg = `Game Over! ${winner} | ${name1}: ${finalP1Score} pts (−${ded1}) | ${name2}: ${finalP2Score} pts (−${ded2})`;
+    }
+
+    const nextPlayer = 1 - currentPlayer;
+    let info = `${this.getPlayerName(currentPlayer)} scored ${moveScore} pts`;
+    if (!firstMovePlayed) info += ' (+10 first move)';
+    if (playedAll) info += ' (+10 clear hand)';
+
+    this.setState({
+      board: newBoard,
+      bag: newBag,
+      p1Hand: newP1Hand,
+      p2Hand: newP2Hand,
+      currentPlayer: nextPlayer,
+      p1Score: finalP1Score,
+      p2Score: finalP2Score,
+      selectedHandIndices: [],
+      selectedCells: [],
+      firstMovePlayed: true,
+      gameOver,
+      lastMoveInfo: info,
+      message: gameOver ? gameOverMsg : this.defaultMessage(nextPlayer),
+    });
+  }
+
+  endGame() {
+    const { p1Hand, p2Hand, p1Score, p2Score } = this.state;
+    const ded1 = rwHandDeductionValue(p1Hand);
+    const ded2 = rwHandDeductionValue(p2Hand);
+    const finalP1 = p1Score - ded1;
+    const finalP2 = p2Score - ded2;
+    const name1 = this.getPlayerName(0);
+    const name2 = this.getPlayerName(1);
+    let winner;
+    if (finalP1 > finalP2) winner = `${name1} wins!`;
+    else if (finalP2 > finalP1) winner = `${name2} wins!`;
+    else winner = 'Tie game!';
+    this.setState({
+      gameOver: true,
+      p1Score: finalP1,
+      p2Score: finalP2,
+      message: `Game Over! ${winner} | ${name1}: ${finalP1} pts (−${ded1}) | ${name2}: ${finalP2} pts (−${ded2})`,
+    });
+  }
+
+  render() {
+    const {
+      board, bag, p1Hand, p2Hand, currentPlayer,
+      p1Score, p2Score, selectedHandIndices, selectedCells,
+      gameOver, message, lastMoveInfo,
+    } = this.state;
+
+    const p1Name = this.getPlayerName(0);
+    const p2Name = this.getPlayerName(1);
+    const hand = currentPlayer === 0 ? p1Hand : p2Hand;
+    const canConfirm = this.canConfirm();
+
+    return (
+      <div>
+        {/* Status message */}
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          style={{
+            marginBottom: '10px',
+            padding: '8px 12px',
+            backgroundColor: gameOver ? '#e8f5e9' : '#e3f2fd',
+            borderRadius: '4px',
+            fontSize: '14px',
+            fontWeight: gameOver ? '600' : 'normal',
+          }}
+        >
+          {message}
+        </div>
+
+        {/* Scoreboard */}
+        <div style={{ display: 'flex', gap: '24px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <strong style={{ color: currentPlayer === 0 && !gameOver ? '#1976d2' : '#333' }}>
+            {p1Name}: {p1Score} pts{currentPlayer === 0 && !gameOver ? ' ◀' : ''}
+          </strong>
+          <strong style={{ color: currentPlayer === 1 && !gameOver ? '#1976d2' : '#333' }}>
+            {p2Name}: {p2Score} pts{currentPlayer === 1 && !gameOver ? ' ◀' : ''}
+          </strong>
+          <span style={{ color: '#888', fontSize: '13px' }}>Tiles in bag: {bag.length}</span>
+          {lastMoveInfo && (
+            <span style={{ color: '#555', fontSize: '12px', fontStyle: 'italic' }}>{lastMoveInfo}</span>
+          )}
+        </div>
+
+        {/* Board */}
+        <RunwabbleBoard
+          board={board}
+          selectedCells={selectedCells}
+          onCellClick={(idx) => this.handleCellClick(idx)}
+        />
+
+        {/* Active player hand and controls */}
+        {!gameOver && (
+          <>
+            <RunwabbleHandDisplay
+              hand={hand}
+              selectedIndices={selectedHandIndices}
+              onCardClick={(i) => this.handleHandClick(i)}
+              onFlipClick={(i) => this.handleFlipClick(i)}
+              label={`${currentPlayer === 0 ? p1Name : p2Name}'s Hand`}
+              isActive={true}
+            />
+
+            <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                style={{ ...btnStyle, backgroundColor: canConfirm ? '#2e7d32' : '#9e9e9e', cursor: canConfirm ? 'pointer' : 'not-allowed' }}
+                disabled={!canConfirm}
+                onClick={() => this.confirmPlacement()}
+                aria-disabled={!canConfirm}
+              >
+                ✓ Confirm Placement
+              </button>
+              <button
+                style={cancelBtnStyle}
+                onClick={() => this.setState({ selectedHandIndices: [], selectedCells: [] }, () => this.updateMessage())}
+              >
+                Clear Selection
+              </button>
+              <button
+                style={{ ...cancelBtnStyle, backgroundColor: '#b71c1c' }}
+                onClick={() => this.endGame()}
+                aria-label="End game and apply tile deductions"
+              >
+                End Game
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Post-game actions */}
+        {gameOver && (
+          <div style={{ marginTop: '16px' }}>
+            <button
+              style={btnStyle}
+              onClick={() => this.props.resetCallback && this.props.resetCallback(p1Score, p2Score)}
+            >
+              New Game
+            </button>
+          </div>
+        )}
+
+        {/* Rules reference */}
+        <details style={{ marginTop: '20px', fontSize: '13px', color: '#555' }}>
+          <summary style={{ cursor: 'pointer', fontWeight: '600', color: '#333' }}>Runwabble Rules</summary>
+          <div style={{ marginTop: '8px', lineHeight: '1.7' }}>
+            <p><strong>Grid:</strong> 14×14. Place 1–5 tiles per turn in a straight horizontal or vertical line.</p>
+            <p><strong>First move:</strong> Place 2–5 tiles anywhere. All later plays must connect to existing tiles.</p>
+            <p><strong>Five-tile limit:</strong> No continuous line of tiles may exceed 5.</p>
+            <p><strong>Scoring (per resulting line of 2+ tiles):</strong></p>
+            <ul>
+              <li>Fifteens – any combination totalling 15: <strong>2 pts</strong></li>
+              <li>Runs – 3/4/5 consecutive values: <strong>3/4/5 pts</strong></li>
+              <li>Sets – pair/3-of-a-kind/4-of-a-kind/5-of-a-kind: <strong>2/6/12/20 pts</strong></li>
+              <li>Color Flush – 5 tiles same suit in one line: <strong>+20 pts bonus</strong></li>
+            </ul>
+            <p><strong>Bonuses:</strong> First move of the game <strong>+10 pts</strong>; playing all 5 hand tiles at once <strong>+10 pts</strong>.</p>
+            <p><strong>Tile values:</strong> Ace=1; 2–9 face value; 10/J/Q/K=10. A 6 tile may be flipped to act as 9 (or vice versa) before placing.</p>
+            <p><strong>End of game:</strong> Bag empty and a player uses their last tile (or click End Game). Remaining hand tile values are <strong>deducted</strong> from each player's score.</p>
+          </div>
+        </details>
+      </div>
+    );
+  }
 }
 
