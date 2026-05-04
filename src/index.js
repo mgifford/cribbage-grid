@@ -165,7 +165,7 @@ function GameSetupScreen({ onStart }) {
   const [p1Type, setP1Type] = useState('human');
   const [p1Name, setP1Name] = useState('Player 1');
   const [p1Level, setP1Level] = useState(5);
-  const [p2Type, setP2Type] = useState('human');
+  const [p2Type, setP2Type] = useState('cpu');
   const [p2Name, setP2Name] = useState('Player 2');
   const [p2Level, setP2Level] = useState(5);
 
@@ -1804,7 +1804,7 @@ function scoreRunwabbleLine(tiles) {
     for (const t of eff) {
       if (t.suit) suitCounts[t.suit] = (suitCounts[t.suit] || 0) + 1;
     }
-    if (Object.values(suitCounts).length > 0 && Math.max(...Object.values(suitCounts)) >= 5) {
+    if (Math.max(...Object.values(suitCounts)) >= 5) {
       score += 20;
     }
   }
@@ -2498,7 +2498,7 @@ class RunwabbleGame extends React.Component {
               <li>Color Flush – 5 tiles same suit in one line: <strong>+20 pts bonus</strong></li>
             </ul>
             <p><strong>Bonuses:</strong> First move of the game <strong>+10 pts</strong>; playing all 5 hand tiles at once <strong>+10 pts</strong>.</p>
-            <p><strong>Tile values:</strong> Ace=1; 2–9 face value; 10/J/Q/K=10. A 6 tile may be flipped to act as 9 (or vice versa) before placing.</p>
+            <p><strong>Tile values:</strong> Ace=1; 2–9 face value; 10/J/Q/K=10. A 6 or 9 tile may be flipped (6↔9) to use the opposite value for scoring — the flip is fixed once the tile is placed.</p>
             <p><strong>End of game:</strong> Bag empty and a player uses their last tile (or click End Game). Remaining hand tile values are <strong>deducted</strong> from each player's score.</p>
           </div>
         </details>
