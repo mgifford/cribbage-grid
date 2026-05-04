@@ -21,9 +21,6 @@ const CENTER = Math.floor(CELLS / 2); // index of the pre-placed centre card
 // A standard 52-card deck covers a 7×7 board (49 cards) with room to spare.
 // For grids > 52 cells, increase NUM_DECKS accordingly.
 const NUM_DECKS = Math.ceil(CELLS / 52);
-const DECK_INITIAL_SIZE = NUM_DECKS * 52;
-// Cards remaining in the deck when every cell has been filled (game over).
-const CARDS_LEFT_AT_END = DECK_INITIAL_SIZE - CELLS;
 
 // =========================================================
 // PeerSync – thin wrapper around PeerJS for state syncing
@@ -326,8 +323,6 @@ class MultiplayerLobby extends React.Component {
         shuffleDeck(deck);
         let cardLayout = Array.from({ length: CELLS }, () => ({ rank: null, suit: null }));
         cardLayout[CENTER] = deck[0];
-        let cardLayout = Array.from({ length: 25 }, () => ({ rank: null, suit: null }));
-        cardLayout[12] = deck[0];
         // Deal 5 cards to each player
         const p1Hand = deck.slice(1, 6);
         const p2Hand = deck.slice(6, 11);
@@ -1608,17 +1603,7 @@ function getCardRatings(subset) {
     handId *= 14;
     handId += n;
   }
-  else {
-    let numbers = realCards.map((x) => convertRankToNumber(x.rank));
-    numbers.sort((a, b) => a - b);
-    let handId = 0;
-    for (const n of numbers) {
-      handId *= 14;
-      handId += n;
-    }
-    return cardRatings[String(handId)];
-  }
-  return rating;
+  return cardRatings[String(handId)];
 }
 
 function getRowRating(array2d, rowInd) {
