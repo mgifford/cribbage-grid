@@ -13,6 +13,20 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // =========================================================
+// Grid configuration
+// =========================================================
+
+const GRID_SIZE = 7;              // side length of the square grid
+const CELLS = GRID_SIZE * GRID_SIZE; // total number of cells
+const CENTER = Math.floor(CELLS / 2); // index of the pre-placed centre card
+// A standard 52-card deck covers a 7×7 board (49 cards) with room to spare.
+// For grids > 52 cells, increase NUM_DECKS accordingly.
+const NUM_DECKS = Math.ceil(CELLS / 52);
+const DECK_INITIAL_SIZE = NUM_DECKS * 52;
+// Cards remaining in the deck when every cell has been filled (game over).
+const CARDS_LEFT_AT_END = DECK_INITIAL_SIZE - CELLS;
+
+// =========================================================
 // PeerSync – thin wrapper around PeerJS for state syncing
 // =========================================================
 
@@ -175,8 +189,8 @@ class MultiplayerLobby extends React.Component {
         // Joiner has connected – generate and send initial game state
         const deck = makeDeck();
         shuffleDeck(deck);
-        let cardLayout = Array.from({ length: 25 }, () => ({ rank: null, suit: null }));
-        cardLayout[12] = deck[0];
+        let cardLayout = Array.from({ length: CELLS }, () => ({ rank: null, suit: null }));
+        cardLayout[CENTER] = deck[0];
         const gameState = {
           deck: deck.slice(1),
           cardLayout,
@@ -424,9 +438,11 @@ function makeDeck() {
   const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10',
                   'jack', 'queen', 'king', 'ace'];
   let ans = [];
-  for (const s of suits) {
-    for (const r of ranks) {
-      ans.push( {rank: r, suit: s});
+  for (let d = 0; d < NUM_DECKS; d++) {
+    for (const s of suits) {
+      for (const r of ranks) {
+        ans.push({ rank: r, suit: s });
+      }
     }
   }
   return ans;
@@ -454,8 +470,8 @@ function shuffleDeck(array) {
 
 class CardGrid extends React.Component {
   renderCard(i) {
-    const row = Math.floor(i / 5) + 1;
-    const col = (i % 5) + 1;
+    const row = Math.floor(i / GRID_SIZE) + 1;
+    const col = (i % GRID_SIZE) + 1;
     const card = this.props.cardLayout[i];
     const posLabel = `Row ${row}, Column ${col}: ${cardDescription(card.rank, card.suit, false)}`;
     return (
@@ -470,7 +486,7 @@ class CardGrid extends React.Component {
 
   getLineScores(indices, maxes, step) {
     var scores = [];
-    for (let ind = 0 ; ind < 5 ; ind++) {
+    for (let ind = 0 ; ind < GRID_SIZE ; ind++) {
 
       let startIndex = indices[ind];
       let maxIndex = maxes[ind];
@@ -492,15 +508,15 @@ class CardGrid extends React.Component {
   }
 
   getRowScores() {
-    return this.getLineScores([0, 5, 10, 15, 20],
-                              [5, 10, 15, 20, 25], 
-                              1);
+    const indices = Array.from({ length: GRID_SIZE }, (_, i) => i * GRID_SIZE);
+    const maxes   = Array.from({ length: GRID_SIZE }, (_, i) => (i + 1) * GRID_SIZE);
+    return this.getLineScores(indices, maxes, 1);
   }
 
   getColumnScores() {
-    return this.getLineScores([0, 1, 2, 3, 4],
-                              [25, 25, 25, 25, 25], 
-                              5);
+    const indices = Array.from({ length: GRID_SIZE }, (_, i) => i);
+    const maxes   = Array.from({ length: GRID_SIZE }, () => CELLS);
+    return this.getLineScores(indices, maxes, GRID_SIZE);
   }
 
 
@@ -532,7 +548,7 @@ class CardGrid extends React.Component {
         </td>
       );
     }
-    for(let c = 0; c < 5; c++) {
+    for(let c = 0; c < GRID_SIZE; c++) {
       topRowElements.push(
         <th key={`col-score-${c}`} scope="col">
           <span className="sr-only">{`Column ${c + 1} score: `}</span>
@@ -547,9 +563,9 @@ class CardGrid extends React.Component {
       </th>
     );
 
-    // Game rows 1–5
+    // Game rows 1–GRID_SIZE
     let bodyRows = [];
-    for (let row = 0; row < 5; row++) {
+    for (let row = 0; row < GRID_SIZE; row++) {
       let rowElements = [];
       rowElements.push(
         <th key="row-score" scope="row">
@@ -557,8 +573,8 @@ class CardGrid extends React.Component {
           <span>{rowScores[row]}</span>
         </th>
       );
-      for(let cardIndex = 0; cardIndex < 5; cardIndex++) {
-        const ind = cardIndex + 5*row;
+      for(let cardIndex = 0; cardIndex < GRID_SIZE; cardIndex++) {
+        const ind = cardIndex + GRID_SIZE * row;
         rowElements.push(<td key={`card-${ind}`}>{this.renderCard(ind)}</td>);
       }
       bodyRows.push(<tr key={`row-${row}`}>{rowElements}</tr>);
@@ -567,7 +583,7 @@ class CardGrid extends React.Component {
     return (
       <table>
         <caption className="sr-only">
-          Cribbage Grid – 5×5 card grid. P1 scores for rows (left totals); P2/CPU scores for columns (top totals).
+          Cribbage Grid – {GRID_SIZE}×{GRID_SIZE} card grid. P1 scores for rows (left totals); P2/CPU scores for columns (top totals).
         </caption>
         <thead>
           <tr>{topRowElements}</tr>
@@ -606,8 +622,8 @@ class CribbageGame extends React.Component {
       shuffleDeck(deck);
 
       // fill center card
-      let cl = Array(25).fill({rank: null, suit: null});
-      cl[12] = deck[0];
+      let cl = Array(CELLS).fill({rank: null, suit: null});
+      cl[CENTER] = deck[0];
 
       this.state = {
         deck: deck.slice(1, deck.length),
@@ -647,8 +663,8 @@ class CribbageGame extends React.Component {
     shuffleDeck(deck);
 
     // fill center card
-    let cl = Array(25).fill({rank: null, suit: null});
-    cl[12] = deck[0];
+    let cl = Array(CELLS).fill({rank: null, suit: null});
+    cl[CENTER] = deck[0];
     deck = deck.slice(1, deck.length);
 
     const newRowTurn = !(this.state.rowTurn);
@@ -685,7 +701,7 @@ class CribbageGame extends React.Component {
     const newRowTurn = !(this.state.rowTurn);
 
     // call cpu here if it needs to make a move still (single-player only).
-    if (!this.props.peerSync && newDeck.length > 27 && !newRowTurn && this.state.cpuEnabled) {
+    if (!this.props.peerSync && newDeck.length > CARDS_LEFT_AT_END && !newRowTurn && this.state.cpuEnabled) {
       setTimeout(()=> this.cpuMoveHandler(newLayout, newDeck[0]), 3000);
     }
 
@@ -718,7 +734,7 @@ class CribbageGame extends React.Component {
     let currentCard;
     let turnText;
 
-    if (this.state.deck.length > 27) {
+    if (this.state.deck.length > CARDS_LEFT_AT_END) {
       currentCard = this.state.deck[0];
       if (this.props.peerSync) {
         const myTurn = this.isMyTurn();
@@ -983,11 +999,13 @@ function scoreFlush(hand) {
   if (hand.length < 5) {
     return 0;
   }
-  if(hand[0].suit === hand[1].suit && 
-    hand[0].suit === hand[2].suit &&
-    hand[0].suit === hand[3].suit &&
-    hand[0].suit === hand[4].suit) {
-      return 5;
+  // Count how many cards share the same suit; score 5 if any suit appears 5+ times.
+  const suitCounts = {};
+  for (const card of hand) {
+    suitCounts[card.suit] = (suitCounts[card.suit] || 0) + 1;
+  }
+  if (Math.max(...Object.values(suitCounts)) >= 5) {
+    return 5;
   }
   return 0;
 }
@@ -1071,10 +1089,10 @@ let cardRatings = require('./ratings.json');
 
 function convertLayoutToGrid(cardLayout) {
   let ans = [];
-  for (let i = 0 ; i < 5 ; i++) {
+  for (let i = 0 ; i < GRID_SIZE ; i++) {
     let row = [];
-    for (let j = 0 ; j < 5 ; j++) {
-      row.push(cardLayout[i*5+j]);
+    for (let j = 0 ; j < GRID_SIZE ; j++) {
+      row.push(cardLayout[i * GRID_SIZE + j]);
     }
     ans.push(row);
   }
@@ -1089,24 +1107,22 @@ function getCardRatings(subset) {
     }
   }
 
-  if (realCards.length === 5) {
-    return scoreHand(realCards);
-  }
-  else if (realCards.length === 0) {
+  if (realCards.length === 0) {
     return cardRatings["0"];
   }
-  else {
-    // Convert to numbers and sort into ascending order.
-    let numbers = realCards.map((x) => convertRankToNumber(x.rank));
-    numbers.sort((a, b) => a - b);
-    // Convert to an ID.
-    let handId = 0;
-    for (const n of numbers) {
-      handId *= 14;
-      handId += n;
-    }
-    return cardRatings[String(handId)];
+  if (realCards.length >= 5) {
+    // For full or over-size rows, use the actual score.
+    return scoreHand(realCards);
   }
+  // For 1–4 cards, use the pre-computed lookup table.
+  let numbers = realCards.map((x) => convertRankToNumber(x.rank));
+  numbers.sort((a, b) => a - b);
+  let handId = 0;
+  for (const n of numbers) {
+    handId *= 14;
+    handId += n;
+  }
+  return cardRatings[String(handId)] || 0;
 }
 
 function getRowRating(array2d, rowInd) {
@@ -1129,8 +1145,8 @@ function getNextMoveRatings(cardLayout, nextCard) {
   let openIndices = [];
   let netRatings = [];
 
-  for (let row = 0 ; row < 5 ; row++) {
-    for (let col = 0 ; col < 5 ; col ++) {
+  for (let row = 0 ; row < GRID_SIZE ; row++) {
+    for (let col = 0 ; col < GRID_SIZE ; col ++) {
       // If spot filled, skip past it. Can't place here.
       if (array2d[row][col].rank) {
         continue;
@@ -1153,7 +1169,7 @@ function getNextMoveRatings(cardLayout, nextCard) {
       // check score differential.
       let scoreDiff = (newColRating - newRowRating) - (baselineColRating - baselineRowRating);
       
-      openIndices.push(row*5 + col);
+      openIndices.push(row * GRID_SIZE + col);
       netRatings.push(scoreDiff);
     }
   }
