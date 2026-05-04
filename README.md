@@ -2,19 +2,33 @@
 
 This is a 5x5 grid version of the card game cribbage. Try it out.
 
-# [Play here!](https://ananswam.github.io/cribbage-grid)
+# [Play here!](https://mgifford.github.io/cribbage-grid)
 
 ## Rules
 
-You are P1 and the CPU is P2. You take turns placing the next card in the deck (shown at the top left) onto the 5x5 grid, by simply clicking on the space that you would like to place the card into. The CPU will then move automatically, making it your move again. You can also disable the CPU and play against a friend sharing a device.
+At the start of each round, each player is dealt a **hand of 5 cards** from a shared shuffled deck. Players alternate turns: on your turn you **select a card from your hand** (click it to highlight it) and then **click an empty cell** in the grid to place it. After placing, you draw a replacement card from the deck (if available).
 
-Each round of the game consists of filling up the 5x5 grid with cards. At the end of the round, whoever has more points gets the difference added to their total points at the top, while the loser gets zero. Another round then begins.
+One player scores for **rows** (P1) and the other for **columns** (P2/CPU). Row and column scores are shown in real time next to each line, with totals in bold. At the end of the round (all 25 cells filled), whoever has more total points wins the difference; the loser gets zero. Then a new round begins with hands dealt again.
 
-Scoring is as follows. You, the row player, get points for the hands made up of each row of the grid. This is done according to standard cribbage rules. The CPU opponent gets points for each column of the grid. These hand totals are shown next to each row and column as the game progresses, and the large bold numbers show the totals for all rows (bottom left) and for all columns (top right).
+Scoring follows standard cribbage rules. See the Cribbage Scoring section below for details.
+
+## Game Setup
+
+Before each game you will see a **Game Setup** screen where you can:
+- Set each player's name
+- Choose whether each player is **Human** or **CPU**
+- Set the CPU difficulty level (1–10) for CPU players
+
+This lets you play solo against the CPU, pass-and-play with a friend on the same device, or watch two CPU players compete.
 
 ## Multiplayer
 
-Click the **🌐 Multiplayer** button to play against a friend on a separate device. One player hosts and shares their Room ID; the other joins with that ID. No account or login is needed.
+Click the **🌐 Multiplayer** button to play against a friend on a separate device.
+
+- **Host**: click "Host Game", enter your name, then share the displayed **Room ID** or scan / send the **QR code** to your opponent.
+- **Join**: scan the QR code (on mobile) or click "Join Game" and type the Room ID, then connect. You can also open a join link directly: `https://mgifford.github.io/cribbage-grid?join=<roomId>`
+
+No account or login is needed. Your identity (name and row/column role) is shown throughout the game.
 
 Multiplayer is powered by [PeerJS](https://peerjs.com/), which uses WebRTC to send game data directly between the two browsers. Two devices on the same Wi-Fi network, mobile hotspot, or even a wired connection can play together **without a public internet connection**. See [docs/peerjs-local-multiplayer.md](docs/peerjs-local-multiplayer.md) for details, including how to run a fully offline self-hosted signaling server.
 
