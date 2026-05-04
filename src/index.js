@@ -2,10 +2,9 @@ import React, {useState} from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
 import Fade from '@material-ui/core/Fade';
-import FormControlLabel from "@material-ui/core/FormControlLabel";
-import Switch from "@material-ui/core/Switch";
 import Typography from '@material-ui/core/Typography';
 import Slider from '@material-ui/core/Slider';
+import { QRCodeSVG } from 'qrcode.react';
 
 if (process.env.NODE_ENV !== 'production') {
   const axe = require('@axe-core/react');
@@ -92,7 +91,7 @@ class PeerSync {
 }
 
 // =========================================================
-// MultiplayerLobby – Host / Join overlay UI
+// Styles
 // =========================================================
 
 const overlayStyle = {
@@ -114,7 +113,10 @@ const modalStyle = {
   borderRadius: '10px',
   textAlign: 'center',
   minWidth: '320px',
+  maxWidth: '90vw',
   boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
+  overflowY: 'auto',
+  maxHeight: '90vh',
 };
 
 const btnStyle = {
@@ -143,15 +145,144 @@ const inputStyle = {
   boxSizing: 'border-box',
 };
 
+// =========================================================
+// GameSetupScreen – choose player names / CPU config
+// =========================================================
+
+function GameSetupScreen({ onStart }) {
+  const [p1Type, setP1Type] = useState('human');
+  const [p1Name, setP1Name] = useState('Player 1');
+  const [p1Level, setP1Level] = useState(5);
+  const [p2Type, setP2Type] = useState('cpu');
+  const [p2Name, setP2Name] = useState('Player 2');
+  const [p2Level, setP2Level] = useState(5);
+
+  function handleStart() {
+    const players = [
+      { type: p1Type, name: p1Type === 'cpu' ? 'CPU' : p1Name, cpuLevel: p1Level, role: 'rows' },
+      { type: p2Type, name: p2Type === 'cpu' ? 'CPU' : p2Name, cpuLevel: p2Level, role: 'cols' },
+    ];
+    onStart(players);
+  }
+
+  const sectionStyle = {
+    border: '1px solid #ddd',
+    borderRadius: '8px',
+    padding: '16px',
+    marginBottom: '16px',
+    textAlign: 'left',
+  };
+  const labelStyle = { fontWeight: '600', display: 'block', marginBottom: '8px' };
+
+  return (
+    <div style={overlayStyle} role="dialog" aria-modal="true" aria-labelledby="setup-heading">
+      <div style={modalStyle}>
+        <h2 id="setup-heading" style={{ marginTop: 0 }}>Game Setup</h2>
+
+        {/* P1 */}
+        <div style={sectionStyle}>
+          <span style={labelStyle}>Player 1 – Rows</span>
+          <div style={{ marginBottom: '8px' }}>
+            <label>
+              <input
+                type="radio" value="human" checked={p1Type === 'human'}
+                onChange={() => setP1Type('human')}
+              />
+              {' '}Human
+            </label>
+            {'  '}
+            <label>
+              <input
+                type="radio" value="cpu" checked={p1Type === 'cpu'}
+                onChange={() => setP1Type('cpu')}
+              />
+              {' '}CPU
+            </label>
+          </div>
+          {p1Type === 'human' && (
+            <input
+              style={inputStyle} type="text" placeholder="Name"
+              value={p1Name} onChange={(e) => setP1Name(e.target.value)}
+              aria-label="Player 1 name"
+            />
+          )}
+          {p1Type === 'cpu' && (
+            <div style={{ width: '200px' }}>
+              <Typography id="p1-cpu-slider" gutterBottom>CPU Difficulty: {p1Level}</Typography>
+              <Slider
+                value={p1Level} aria-labelledby="p1-cpu-slider"
+                valueLabelDisplay="auto"
+                onChange={(e, v) => setP1Level(v)}
+                step={1} marks min={1} max={10}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* P2 */}
+        <div style={sectionStyle}>
+          <span style={labelStyle}>Player 2 – Columns</span>
+          <div style={{ marginBottom: '8px' }}>
+            <label>
+              <input
+                type="radio" value="human" checked={p2Type === 'human'}
+                onChange={() => setP2Type('human')}
+              />
+              {' '}Human
+            </label>
+            {'  '}
+            <label>
+              <input
+                type="radio" value="cpu" checked={p2Type === 'cpu'}
+                onChange={() => setP2Type('cpu')}
+              />
+              {' '}CPU
+            </label>
+          </div>
+          {p2Type === 'human' && (
+            <input
+              style={inputStyle} type="text" placeholder="Name"
+              value={p2Name} onChange={(e) => setP2Name(e.target.value)}
+              aria-label="Player 2 name"
+            />
+          )}
+          {p2Type === 'cpu' && (
+            <div style={{ width: '200px' }}>
+              <Typography id="p2-cpu-slider" gutterBottom>CPU Difficulty: {p2Level}</Typography>
+              <Slider
+                value={p2Level} aria-labelledby="p2-cpu-slider"
+                valueLabelDisplay="auto"
+                onChange={(e, v) => setP2Level(v)}
+                step={1} marks min={1} max={10}
+              />
+            </div>
+          )}
+        </div>
+
+        <button style={btnStyle} onClick={handleStart}>
+          Start Game
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =========================================================
+// MultiplayerLobby – Host / Join overlay UI
+// =========================================================
+
 class MultiplayerLobby extends React.Component {
   constructor(props) {
     super(props);
+    const autoId = props.autoJoinId || '';
     this.state = {
-      mode: null,       // 'host' | 'join' | null
-      roomId: '',       // displayed to host
-      joinId: '',       // typed by joiner
-      status: 'idle',  // 'idle' | 'waiting' | 'connecting' | 'error'
+      mode: autoId ? 'join' : null,
+      roomId: '',
+      joinId: autoId,
+      status: 'idle',
       errorMsg: '',
+      playerName: props.localName || '',
+      copied: false,
     };
     this._mounted = false;
     this.peerSync = new PeerSync();
@@ -159,6 +290,10 @@ class MultiplayerLobby extends React.Component {
 
   componentDidMount() {
     this._mounted = true;
+    // Auto-connect if we received an autoJoinId
+    if (this.props.autoJoinId && this.state.joinId) {
+      this.handleJoin();
+    }
   }
 
   componentWillUnmount() {
@@ -172,20 +307,28 @@ class MultiplayerLobby extends React.Component {
         if (this._mounted) this.setState({ roomId: id });
       },
       () => {
-        // Joiner has connected – generate and send initial game state
+        // Joiner connected – generate initial game state and send it
         const deck = makeDeck();
         shuffleDeck(deck);
         let cardLayout = Array.from({ length: 25 }, () => ({ rank: null, suit: null }));
         cardLayout[12] = deck[0];
+        // Deal 5 cards to each player
+        const p1Hand = deck.slice(1, 6);
+        const p2Hand = deck.slice(6, 11);
+        const remainingDeck = deck.slice(11);
         const gameState = {
-          deck: deck.slice(1),
+          deck: remainingDeck,
+          p1Hand,
+          p2Hand,
           cardLayout,
           rowTurn: true,
+          p1Name: this.state.playerName || 'Host',
+          p2Name: '',  // joiner will fill in
         };
         this.peerSync.state = gameState;
         this.peerSync.sync();
         if (this._mounted) this.setState({ status: 'connected' });
-        this.props.onConnected(this.peerSync, true, gameState);
+        this.props.onConnected(this.peerSync, true, gameState, this.state.playerName || 'Host');
       }
     );
   }
@@ -195,10 +338,13 @@ class MultiplayerLobby extends React.Component {
     if (!hostId) return;
     this.setState({ status: 'connecting' });
     this.peerSync.join(hostId, () => {
-      // Connection open – wait for host to send initial state
       this.peerSync.once('update', (gameState) => {
+        // Patch in our name
+        const patchedState = { ...gameState, p2Name: this.state.playerName || 'Guest' };
+        this.peerSync.state = patchedState;
+        this.peerSync.sync();
         if (this._mounted) this.setState({ status: 'connected' });
-        this.props.onConnected(this.peerSync, false, gameState);
+        this.props.onConnected(this.peerSync, false, patchedState, this.state.playerName || 'Guest');
       });
     });
   }
@@ -208,8 +354,18 @@ class MultiplayerLobby extends React.Component {
     this.props.onCancel();
   }
 
+  copyJoinLink() {
+    const url = buildJoinUrl(this.state.roomId);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => {
+        this.setState({ copied: true });
+        setTimeout(() => this.setState({ copied: false }), 2000);
+      });
+    }
+  }
+
   render() {
-    const { mode, roomId, joinId, status, errorMsg } = this.state;
+    const { mode, roomId, joinId, status, errorMsg, playerName, copied } = this.state;
 
     if (status === 'connected') {
       return (
@@ -221,10 +377,27 @@ class MultiplayerLobby extends React.Component {
       );
     }
 
+    const joinUrl = roomId ? buildJoinUrl(roomId) : '';
+
     return (
       <div style={overlayStyle} role="dialog" aria-modal="true" aria-labelledby="multiplayer-heading">
         <div style={modalStyle}>
           <h2 id="multiplayer-heading" style={{ marginTop: 0 }}>Multiplayer</h2>
+
+          {/* Name field always shown */}
+          <div style={{ marginBottom: '16px', textAlign: 'left' }}>
+            <label htmlFor="mp-name-input" style={{ display: 'block', marginBottom: '4px', fontWeight: '600' }}>
+              Your Name
+            </label>
+            <input
+              id="mp-name-input"
+              style={inputStyle}
+              type="text"
+              placeholder="Enter your name"
+              value={playerName}
+              onChange={(e) => this.setState({ playerName: e.target.value })}
+            />
+          </div>
 
           {!mode && (
             <>
@@ -262,15 +435,24 @@ class MultiplayerLobby extends React.Component {
                   >
                     {roomId}
                   </p>
+                  {/* QR code for mobile scanning */}
+                  <div style={{ margin: '16px auto', display: 'inline-block' }}>
+                    <QRCodeSVG value={joinUrl} size={200} aria-label="QR code to join game" />
+                  </div>
+                  <p style={{ fontSize: '13px', color: '#555', marginTop: '4px', wordBreak: 'break-all' }}>
+                    {joinUrl}
+                  </p>
+                  <div>
+                    <button style={{ ...btnStyle, fontSize: '14px', padding: '6px 16px' }} onClick={() => this.copyJoinLink()}>
+                      {copied ? '✓ Copied!' : 'Copy Link'}
+                    </button>
+                  </div>
                 </>
               ) : (
                 <p>Generating Room ID…</p>
               )}
               <p style={{ color: '#555' }}>Waiting for opponent to connect…</p>
-              <button
-                style={cancelBtnStyle}
-                onClick={() => this.handleCancel()}
-              >
+              <button style={cancelBtnStyle} onClick={() => this.handleCancel()}>
                 Cancel
               </button>
             </>
@@ -278,7 +460,7 @@ class MultiplayerLobby extends React.Component {
 
           {mode === 'join' && (
             <>
-              <label htmlFor="room-id-input" style={{ display: 'block', marginBottom: '4px', fontWeight: '600' }}>
+              <label htmlFor="room-id-input" style={{ display: 'block', marginBottom: '4px', fontWeight: '600', textAlign: 'left' }}>
                 Room ID
               </label>
               <input
@@ -300,10 +482,7 @@ class MultiplayerLobby extends React.Component {
               >
                 {status === 'connecting' ? 'Connecting…' : 'Connect'}
               </button>
-              <button
-                style={cancelBtnStyle}
-                onClick={() => this.handleCancel()}
-              >
+              <button style={cancelBtnStyle} onClick={() => this.handleCancel()}>
                 Cancel
               </button>
               {errorMsg && <p style={{ color: 'red' }}>{errorMsg}</p>}
@@ -314,6 +493,22 @@ class MultiplayerLobby extends React.Component {
     );
   }
 }
+
+/** Build the join URL from a room ID using the current page origin+path. */
+function buildJoinUrl(roomId) {
+  const base = window.location.origin + window.location.pathname;
+  return `${base}?join=${encodeURIComponent(roomId)}`;
+}
+
+/** Parse ?join=<id> from the current URL. Returns the id string or null. */
+function getAutoJoinId() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('join') || null;
+}
+
+// =========================================================
+// Card display components
+// =========================================================
 
 class Deck extends React.Component {
   render() {
@@ -359,7 +554,7 @@ function cardDescription(rank, suit, showBack) {
   return 'Empty cell';
 }
 
-function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, ...rest }) {
+function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, selected, ...rest }) {
   let location;
   if (showBack) {
     location = "cards/astronaut.svg";
@@ -373,6 +568,10 @@ function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, ...
 
   const description = ariaLabel || cardDescription(rank, suit, showBack);
 
+  const selectedBorderStyle = selected
+    ? { outline: '3px solid #f57c00', outlineOffset: '2px', borderRadius: '4px' }
+    : {};
+
   if (clickHandler) {
     const handleKey = (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -385,10 +584,11 @@ function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, ...
         {...rest}
         role="button"
         tabIndex={0}
-        aria-label={description}
+        aria-label={description + (selected ? ' (selected)' : '')}
+        aria-pressed={selected || false}
         onClick={clickHandler}
         onKeyDown={handleKey}
-        style={{ display: 'inline-block', cursor: 'pointer' }}
+        style={{ display: 'inline-block', cursor: 'pointer', ...selectedBorderStyle }}
       >
         <img src={location} width="50px" alt="" aria-hidden="true" />
       </div>
@@ -396,7 +596,7 @@ function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, ...
   }
 
   return (
-    <div {...rest}>
+    <div {...rest} style={{ display: 'inline-block', ...selectedBorderStyle }}>
       <img src={location} width="50px" alt={description} />
     </div>
   );
@@ -419,6 +619,60 @@ function FadeCard(props) {
     </Fade>);
 }
 
+// =========================================================
+// HandDisplay – shows a player's hand of cards
+// =========================================================
+
+function HandDisplay({ hand, selectedIndex, onCardClick, label, faceDown, isActive }) {
+  if (!hand || hand.length === 0) return null;
+
+  const containerStyle = {
+    margin: '12px 0',
+    padding: '10px',
+    backgroundColor: isActive ? '#e3f2fd' : '#f5f5f5',
+    borderRadius: '8px',
+    border: isActive ? '2px solid #1976d2' : '1px solid #ccc',
+    display: 'inline-block',
+  };
+
+  return (
+    <div style={containerStyle}>
+      <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#444' }}>
+        {label}
+        {isActive && <span style={{ color: '#1976d2', marginLeft: '8px' }}>← click a card to select it</span>}
+      </div>
+      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+        {hand.map((card, i) => {
+          if (!card || !card.rank) return null;
+          if (faceDown) {
+            return (
+              <Card
+                key={i}
+                showBack={true}
+                aria-label={`Opponent card ${i + 1} (face down)`}
+              />
+            );
+          }
+          return (
+            <Card
+              key={i}
+              rank={card.rank}
+              suit={card.suit}
+              selected={selectedIndex === i}
+              clickHandler={isActive ? () => onCardClick(i) : undefined}
+              aria-label={`${cardDescription(card.rank, card.suit, false)}${selectedIndex === i ? ' (selected)' : ''}`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// =========================================================
+// Deck / card utilities
+// =========================================================
+
 function makeDeck() {
   const suits = ['clubs', 'diamonds', 'hearts', 'spades'];
   const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10',
@@ -435,14 +689,10 @@ function makeDeck() {
 function shuffleDeck(array) {
   var currentIndex = array.length, temporaryValue, randomIndex;
 
-  // While there remain elements to shuffle...
   while (0 !== currentIndex) {
-
-    // Pick a remaining element...
     randomIndex = Math.floor(Math.random() * currentIndex);
     currentIndex -= 1;
 
-    // And swap it with the current element.
     temporaryValue = array[currentIndex];
     array[currentIndex] = array[randomIndex];
     array[randomIndex] = temporaryValue;
@@ -451,19 +701,36 @@ function shuffleDeck(array) {
   return array;
 }
 
+/** Deal initial hands from a deck. Returns {p1Hand, p2Hand, remainingDeck}.
+ *  Assumes deck[0] is already used as the center card.
+ */
+function dealHands(deck) {
+  const p1Hand = deck.slice(0, 5);
+  const p2Hand = deck.slice(5, 10);
+  const remainingDeck = deck.slice(10);
+  return { p1Hand, p2Hand, remainingDeck };
+}
+
+// =========================================================
+// CardGrid
+// =========================================================
 
 class CardGrid extends React.Component {
   renderCard(i) {
     const row = Math.floor(i / 5) + 1;
     const col = (i % 5) + 1;
     const card = this.props.cardLayout[i];
-    const posLabel = `Row ${row}, Column ${col}: ${cardDescription(card.rank, card.suit, false)}`;
+    const isEmpty = !card.rank;
+    const isPlaceable = this.props.selectedHandCard && isEmpty;
+    let posLabel = `Row ${row}, Column ${col}: ${cardDescription(card.rank, card.suit, false)}`;
+    if (isPlaceable) posLabel += ' – click to place selected card here';
     return (
       <FadeCard
         rank={card.rank}
         suit={card.suit}
         clickHandler={() => this.props.clickHandler(i)}
         aria-label={posLabel}
+        style={isPlaceable ? { outline: '2px dashed #1976d2', borderRadius: '4px' } : {}}
       />
     );
   }
@@ -474,14 +741,12 @@ class CardGrid extends React.Component {
 
       let startIndex = indices[ind];
       let maxIndex = maxes[ind];
-      // get non null cards in row.
       let lineCards = [];
       for(let i = startIndex; i < maxIndex; i += step) {
         if (this.props.cardLayout[i].rank) {
           lineCards.push(this.props.cardLayout[i]);
         }
       }
-      // Get score for them.
       let score = 0;
       if (lineCards.length > 1) {
         score = scoreHand(lineCards);
@@ -518,6 +783,7 @@ class CardGrid extends React.Component {
           <Card
             rank={this.props.nextCard.rank}
             suit={this.props.nextCard.suit}
+            aria-label={`Next card: ${cardDescription(this.props.nextCard.rank, this.props.nextCard.suit, false)}`}
           />
         </td>
       );
@@ -588,47 +854,66 @@ class CardGrid extends React.Component {
   }
 }
 
+// =========================================================
+// CribbageGame – single round, with hand system
+// =========================================================
+
 class CribbageGame extends React.Component {
   constructor(props) {
     super(props);
 
     if (props.initialGameState) {
-      // Multiplayer: use the shared initial state provided by the host
+      // Multiplayer: use the shared initial state from the host
       this.state = {
         deck: props.initialGameState.deck,
+        p1Hand: props.initialGameState.p1Hand || [],
+        p2Hand: props.initialGameState.p2Hand || [],
         cardLayout: props.initialGameState.cardLayout,
         rowTurn: props.initialGameState.rowTurn,
-        cpuEnabled: false,
-        cpuLevel: 5,
+        selectedHandIndex: null,
+        p1Name: props.initialGameState.p1Name || 'Host',
+        p2Name: props.initialGameState.p2Name || 'Guest',
       };
     } else {
       const deck = makeDeck();
       shuffleDeck(deck);
 
-      // fill center card
-      let cl = Array(25).fill({rank: null, suit: null});
+      // center card
+      let cl = Array(25).fill(null).map(() => ({ rank: null, suit: null }));
       cl[12] = deck[0];
 
+      // deal hands from the rest of the deck
+      const { p1Hand, p2Hand, remainingDeck } = dealHands(deck.slice(1));
+
       this.state = {
-        deck: deck.slice(1, deck.length),
+        deck: remainingDeck,
+        p1Hand,
+        p2Hand,
         cardLayout: cl,
         rowTurn: true,
-        cpuEnabled: !props.peerSync, // disable CPU in multiplayer
-        cpuLevel: 5,
+        selectedHandIndex: null,
       };
     }
   }
 
   componentDidMount() {
     if (this.props.peerSync) {
-      // Listen for remote state updates and re-render
       this.props.peerSync.on('update', (newState) => {
         this.setState({
           deck: newState.deck,
+          p1Hand: newState.p1Hand || [],
+          p2Hand: newState.p2Hand || [],
           cardLayout: newState.cardLayout,
           rowTurn: newState.rowTurn,
+          selectedHandIndex: null,
+          // Update names when they arrive (joiner sends back p2Name on first sync)
+          p1Name: newState.p1Name || this.state.p1Name,
+          p2Name: newState.p2Name || this.state.p2Name,
         });
       });
+    } else {
+      // Single-player: fire CPU if it is CPU's turn first
+      this._maybeTriggerCpu(this.state);
     }
   }
 
@@ -637,195 +922,340 @@ class CribbageGame extends React.Component {
     return this.props.isHost ? this.state.rowTurn : !this.state.rowTurn;
   }
 
-  resetGame() {
-    // In multiplayer, only the host can reset (start a new round)
-    if (this.props.peerSync && !this.props.isHost) {
-      return;
+  /** Current player's player config (from props.players). */
+  currentPlayer() {
+    const idx = this.state.rowTurn ? 0 : 1;
+    const players = this.props.players || [
+      { type: 'human', name: 'P1', cpuLevel: 5, role: 'rows' },
+      { type: 'cpu',   name: 'CPU', cpuLevel: 5, role: 'cols' },
+    ];
+    return players[idx];
+  }
+
+  /** Fire CPU move if current player is CPU (single-player only). */
+  _maybeTriggerCpu(state) {
+    if (this.props.peerSync) return;
+    const players = this.props.players || [
+      { type: 'human', name: 'P1', cpuLevel: 5, role: 'rows' },
+      { type: 'cpu',   name: 'CPU', cpuLevel: 5, role: 'cols' },
+    ];
+    const idx = state.rowTurn ? 0 : 1;
+    const player = players[idx];
+    const hand = state.rowTurn ? state.p1Hand : state.p2Hand;
+    const hasCards = state.cardLayout.some(c => !c.rank);
+    if (player.type === 'cpu' && hasCards && hand && hand.length > 0) {
+      setTimeout(() => this.cpuMoveHandler(), 1200);
     }
+  }
+
+  resetGame() {
+    if (this.props.peerSync && !this.props.isHost) return;
 
     let deck = makeDeck();
     shuffleDeck(deck);
 
-    // fill center card
-    let cl = Array(25).fill({rank: null, suit: null});
+    let cl = Array(25).fill(null).map(() => ({ rank: null, suit: null }));
     cl[12] = deck[0];
-    deck = deck.slice(1, deck.length);
+
+    const { p1Hand, p2Hand, remainingDeck } = dealHands(deck.slice(1));
 
     const newRowTurn = !(this.state.rowTurn);
 
-    // call cpu here if it needs to make a move still (single-player only).
-    if (!this.props.peerSync && !newRowTurn && this.state.cpuEnabled) {
-      setTimeout(()=> this.cpuMoveHandler(cl, deck[0]), 3000);
-    }
-
-    const newState = { deck, cardLayout: cl, rowTurn: newRowTurn };
+    const newState = {
+      deck: remainingDeck,
+      p1Hand,
+      p2Hand,
+      cardLayout: cl,
+      rowTurn: newRowTurn,
+      selectedHandIndex: null,
+    };
 
     if (this.props.peerSync) {
       this.props.peerSync.state = newState;
       this.props.peerSync.sync();
     }
 
-    this.setState(newState);
+    this.setState(newState, () => {
+      this._maybeTriggerCpu(newState);
+    });
+  }
+
+  handleHandClick(index) {
+    // Toggle selection
+    const newIndex = this.state.selectedHandIndex === index ? null : index;
+    this.setState({ selectedHandIndex: newIndex });
   }
 
   handleGridClick(i) {
-    // If there is already a card there, do nothing.
-    if(this.state.cardLayout[i].rank && this.state.cardLayout[i].suit) {
-      return;
+    if (this.state.cardLayout[i].rank) return; // already filled
+
+    // Multiplayer: enforce turn
+    if (this.props.peerSync && !this.isMyTurn()) return;
+
+    // Single-player: only the human player can click during their turn
+    if (!this.props.peerSync) {
+      const player = this.currentPlayer();
+      if (player.type === 'cpu') return;
     }
 
-    // Multiplayer turn enforcement: host plays rows, joiner plays columns
-    if (this.props.peerSync) {
-      if (!this.isMyTurn()) return;
+    const { selectedHandIndex, rowTurn } = this.state;
+    if (selectedHandIndex === null) return; // no card selected
+
+    const hand = rowTurn ? this.state.p1Hand : this.state.p2Hand;
+    const cardToPlace = hand[selectedHandIndex];
+    if (!cardToPlace || !cardToPlace.rank) return;
+
+    // Remove card from hand, draw from deck if available
+    const newHand = hand.filter((_, idx) => idx !== selectedHandIndex);
+    let newDeck = this.state.deck.slice();
+    if (newDeck.length > 0) {
+      newHand.push(newDeck[0]);
+      newDeck = newDeck.slice(1);
     }
 
-    const newLayout = this.state.cardLayout.slice()
-    newLayout[i] = this.state.deck[0];
-    const newDeck = this.state.deck.slice(1, this.state.deck.length);
-    const newRowTurn = !(this.state.rowTurn);
-
-    // call cpu here if it needs to make a move still (single-player only).
-    if (!this.props.peerSync && newDeck.length > 27 && !newRowTurn && this.state.cpuEnabled) {
-      setTimeout(()=> this.cpuMoveHandler(newLayout, newDeck[0]), 3000);
-    }
+    const newLayout = this.state.cardLayout.slice();
+    newLayout[i] = cardToPlace;
+    const newRowTurn = !rowTurn;
 
     const newState = {
       deck: newDeck,
+      p1Hand: rowTurn ? newHand : this.state.p1Hand,
+      p2Hand: rowTurn ? this.state.p2Hand : newHand,
       cardLayout: newLayout,
       rowTurn: newRowTurn,
+      selectedHandIndex: null,
     };
 
-    // Sync to peer before applying locally so the remote player updates promptly
     if (this.props.peerSync) {
       this.props.peerSync.state = newState;
       this.props.peerSync.sync();
     }
 
-    this.setState(newState);
+    this.setState(newState, () => {
+      this._maybeTriggerCpu(newState);
+    });
   }
 
-  cpuMoveHandler(cardLayout, nextCard) {
-    if (nextCard === null) {
-      console.log(this.state);
+  cpuMoveHandler() {
+    const { rowTurn, cardLayout } = this.state;
+    const hand = rowTurn ? this.state.p1Hand : this.state.p2Hand;
+    const players = this.props.players || [
+      { type: 'human', name: 'P1', cpuLevel: 5, role: 'rows' },
+      { type: 'cpu',   name: 'CPU', cpuLevel: 5, role: 'cols' },
+    ];
+    const playerIdx = rowTurn ? 0 : 1;
+    const cpuLevel = players[playerIdx].cpuLevel || 5;
+
+    const move = getCpuHandMove(cardLayout, hand, cpuLevel);
+    if (!move) return;
+
+    const { handIndex, gridIndex } = move;
+
+    // Remove card from hand, draw from deck
+    const newHand = hand.filter((_, idx) => idx !== handIndex);
+    let newDeck = this.state.deck.slice();
+    if (newDeck.length > 0) {
+      newHand.push(newDeck[0]);
+      newDeck = newDeck.slice(1);
     }
-    let ans = getNextMove(cardLayout, nextCard, this.state.cpuLevel);
-    if (ans !== null) {
-      this.handleGridClick(ans);
-    }
+
+    const newLayout = cardLayout.slice();
+    newLayout[gridIndex] = hand[handIndex];
+    const newRowTurn = !rowTurn;
+
+    const newState = {
+      deck: newDeck,
+      p1Hand: rowTurn ? newHand : this.state.p1Hand,
+      p2Hand: rowTurn ? this.state.p2Hand : newHand,
+      cardLayout: newLayout,
+      rowTurn: newRowTurn,
+      selectedHandIndex: null,
+    };
+
+    this.setState(newState, () => {
+      this._maybeTriggerCpu(newState);
+    });
   }
 
   render() {
-    let currentCard;
+    const { cardLayout, rowTurn, p1Hand, p2Hand, selectedHandIndex, deck,
+            p1Name: stateP1Name, p2Name: stateP2Name } = this.state;
+    const { peerSync, isHost, players } = this.props;
+
+    const p1Config = (players && players[0]) || { type: 'human', name: 'P1', role: 'rows' };
+    const p2Config = (players && players[1]) || { type: 'cpu', name: 'CPU', role: 'cols' };
+
+    // Names resolved from state (multiplayer) or player config (single-player)
+    const resolvedP1Name = peerSync ? (stateP1Name || 'Host') : p1Config.name;
+    const resolvedP2Name = peerSync ? (stateP2Name || 'Guest') : p2Config.name;
+
+    // Determine round-over: all 24 non-center cells filled
+    const emptyCells = cardLayout.filter((c, idx) => idx !== 12 && !c.rank).length;
+    const roundOver = emptyCells === 0;
+
+    // Turn text
     let turnText;
-
-    if (this.state.deck.length > 27) {
-      currentCard = this.state.deck[0];
-      if (this.props.peerSync) {
-        const myTurn = this.isMyTurn();
-        const role = this.props.isHost ? 'rows' : 'columns';
-        turnText = myTurn
-          ? `Your Turn (${role})`
-          : "Opponent's Turn";
+    if (roundOver) {
+      if (peerSync) {
+        turnText = isHost
+          ? "Round Over – click deck to start next round"
+          : "Round Over – waiting for host to start next round";
       } else {
-        turnText = this.state.rowTurn? "P1's Turn (rows)" : " P2/CPU's Turn (columns)";
+        turnText = "Round Over – click deck (astronaut) for next round";
       }
-    }
-    else {
-      currentCard = null;
-      if (this.props.peerSync) {
-        if (this.props.isHost) {
-          turnText = "Round Over – click deck to start next round";
-        } else {
-          turnText = "Round Over – waiting for host to start next round";
-        }
-      } else {
-        turnText = "Round Over - click deck (astronaut) for next round";
-      }
+    } else if (peerSync) {
+      const myTurn = this.isMyTurn();
+      const myRole = isHost ? 'rows' : 'cols';
+      const myName = isHost ? resolvedP1Name : resolvedP2Name;
+      turnText = myTurn
+        ? `Your Turn – ${myName} (${myRole})`
+        : "Opponent's Turn";
+    } else {
+      const cp = rowTurn ? p1Config : p2Config;
+      const role = rowTurn ? 'rows' : 'cols';
+      turnText = cp.type === 'cpu'
+        ? `CPU's Turn (${role}) – ${cp.name}`
+        : `${cp.name}'s Turn (${role})`;
     }
 
+    // The "next card" shown in top-left of grid is the first card of the current player's hand
+    // (or null to show the deck/reset button when round is over)
+    const currentHand = rowTurn ? p1Hand : p2Hand;
+    const nextCardForGrid = (!roundOver && currentHand && currentHand[0]) ? currentHand[0] : null;
+
+    // Grid click handler
     const gridClickHandler = (i) => {
-      if (this.props.peerSync) {
-        if (this.isMyTurn()) this.handleGridClick(i);
-      } else {
-        if (this.state.rowTurn || !this.state.cpuEnabled) this.handleGridClick(i);
-      }
+      this.handleGridClick(i);
     };
 
-    // In multiplayer, only the host can reset the round
     const resetClickHandler = (r, c) => {
-      if (!this.props.peerSync || this.props.isHost) {
+      if (!peerSync || isHost) {
         this.resetGame();
         this.props.resetCallback(r, c);
       }
     };
 
+    // Determine whether current human player needs to interact with their hand
+    const isLocalHumanTurn = !peerSync
+      ? (rowTurn ? p1Config.type === 'human' : p2Config.type === 'human')
+      : this.isMyTurn();
+
+    const selectedCardForGrid = isLocalHumanTurn && selectedHandIndex !== null
+      ? (rowTurn ? p1Hand[selectedHandIndex] : p2Hand[selectedHandIndex])
+      : null;
+
     return (
       <div>
         <div aria-live="polite" aria-atomic="true" className="sr-only">{turnText}</div>
         <h3>{turnText}</h3>
+
+        {/* Identity label */}
+        {peerSync && (
+          <p style={{ color: '#555', fontSize: '14px', marginTop: 0 }}>
+            You are: <strong>
+              {isHost ? `${resolvedP1Name} (rows)` : `${resolvedP2Name} (cols)`}
+            </strong>
+          </p>
+        )}
+
         <br/>
         <CardGrid
-          nextCard={currentCard}
-          cardLayout={this.state.cardLayout}
+          nextCard={roundOver ? null : nextCardForGrid}
+          cardLayout={cardLayout}
           clickHandler={gridClickHandler}
           resetCallback={resetClickHandler}
+          selectedHandCard={selectedCardForGrid}
         />
         <br />
-        {!this.props.peerSync && (
-          <>
-            <FormControlLabel
-              control={
-                <Switch checked={this.state.cpuEnabled}
-                        onChange={() => this.setState({cpuEnabled: !this.state.cpuEnabled})}
-                        name="cpuEnableSwitch" />
-              }
-              label="CPU Opponent"
+
+        {/* Hand displays */}
+        {!peerSync && (
+          <div>
+            {/* P1 hand */}
+            <HandDisplay
+              hand={p1Hand}
+              selectedIndex={rowTurn && isLocalHumanTurn ? selectedHandIndex : null}
+              onCardClick={(i) => this.handleHandClick(i)}
+              label={`${resolvedP1Name}'s Hand (rows)`}
+              faceDown={p1Config.type === 'cpu'}
+              isActive={rowTurn && p1Config.type === 'human' && !roundOver}
             />
-            <br />
-            <div style={{width: "200px"}}>
-              <Typography id="discrete-slider" gutterBottom>
-                {"CPU Difficulty"}
-              </Typography>
-              <Slider
-                defaultValue={5}
-                aria-labelledby="discrete-slider"
-                valueLabelDisplay="auto"
-                onChange={(e, v) => this.setState({cpuLevel: v})}
-                step={1}
-                marks
-                min={1}
-                max={10}
-                disabled={!this.state.cpuEnabled}
-              />
-            </div>
-          </>
+            {/* P2 hand */}
+            <HandDisplay
+              hand={p2Hand}
+              selectedIndex={!rowTurn && isLocalHumanTurn ? selectedHandIndex : null}
+              onCardClick={(i) => this.handleHandClick(i)}
+              label={`${resolvedP2Name}'s Hand (cols)`}
+              faceDown={p2Config.type === 'cpu'}
+              isActive={!rowTurn && p2Config.type === 'human' && !roundOver}
+            />
+          </div>
         )}
+
+        {peerSync && (
+          <div>
+            {/* Show your own hand face-up */}
+            <HandDisplay
+              hand={isHost ? p1Hand : p2Hand}
+              selectedIndex={isLocalHumanTurn ? selectedHandIndex : null}
+              onCardClick={(i) => this.handleHandClick(i)}
+              label={`Your Hand – ${isHost ? resolvedP1Name : resolvedP2Name} (${isHost ? 'rows' : 'cols'})`}
+              faceDown={false}
+              isActive={isLocalHumanTurn && !roundOver}
+            />
+            {/* Show opponent's hand face-down */}
+            <HandDisplay
+              hand={isHost ? p2Hand : p1Hand}
+              selectedIndex={null}
+              onCardClick={() => {}}
+              label={`Opponent's Hand – ${isHost ? resolvedP2Name : resolvedP1Name} (${isHost ? 'cols' : 'rows'})`}
+              faceDown={true}
+              isActive={false}
+            />
+          </div>
+        )}
+
+        {/* Deck size info */}
+        <p style={{ fontSize: '12px', color: '#888' }}>
+          Cards remaining in deck: {deck.length}
+        </p>
       </div>
     );
   }
 }
 
+// =========================================================
+// MultiRoundCribbageGame – top-level component
+// =========================================================
+
 class MultiRoundCribbageGame extends React.Component {
   constructor(props) {
     super(props);
+    const autoJoinId = getAutoJoinId();
     this.state = {
       rowScoreboard: 0,
       colScoreboard: 0,
-      showMultiplayerLobby: false,
+      showMultiplayerLobby: !!autoJoinId,
+      autoJoinId,
       peerSync: null,
       isHost: false,
       multiplayerInitialState: null,
-    }
+      localName: '',
+      players: null,       // null = show setup screen
+      gameKey: 0,          // bump to force remount of CribbageGame
+    };
   }
 
-  handleMultiplayerConnected(peerSync, isHost, gameState) {
+  handleMultiplayerConnected(peerSync, isHost, gameState, localName) {
     this.setState({
       showMultiplayerLobby: false,
       peerSync,
       isHost,
       multiplayerInitialState: gameState,
+      localName,
       rowScoreboard: 0,
       colScoreboard: 0,
+      players: null,
     });
   }
 
@@ -837,60 +1267,116 @@ class MultiRoundCribbageGame extends React.Component {
       peerSync: null,
       isHost: false,
       multiplayerInitialState: null,
+      localName: '',
       rowScoreboard: 0,
       colScoreboard: 0,
+      players: null,
+      gameKey: this.state.gameKey + 1,
     });
   }
 
+  handleSetupStart(players) {
+    this.setState({ players, gameKey: this.state.gameKey + 1 });
+  }
+
   updateScore(rScore, cScore) {
+    const { players, multiplayerInitialState } = this.state;
+    const p1Name = players
+      ? players[0].name
+      : (multiplayerInitialState
+          ? (multiplayerInitialState.p1Name || 'Host')
+          : 'P1');
+    const p2Name = players
+      ? players[1].name
+      : (multiplayerInitialState
+          ? (multiplayerInitialState.p2Name || 'Guest')
+          : 'P2/CPU');
+
     let msg;
     if (rScore > cScore) {
       rScore = rScore - cScore;
       cScore = 0;
-      msg = "P1 (Row) Wins: " + rScore + " points";;
+      msg = `${p1Name} (rows) wins: ${rScore} points`;
     }
     else if (cScore > rScore) {
       cScore = cScore - rScore;
       rScore = 0;
-      msg = "P2/CPU (Col) Wins: " + cScore + " points";
+      msg = `${p2Name} (cols) wins: ${cScore} points`;
     }
-    else { //tie
+    else {
       msg = "Tie!";
       cScore = 0;
       rScore = 0;
     }
 
     alert(msg);
-    this.setState({rowScoreboard: this.state.rowScoreboard+rScore,
-                   colScoreboard: this.state.colScoreboard+cScore});
+    this.setState({
+      rowScoreboard: this.state.rowScoreboard + rScore,
+      colScoreboard: this.state.colScoreboard + cScore,
+    });
   }
 
 
   render() {
-    const { showMultiplayerLobby, peerSync, isHost, multiplayerInitialState } = this.state;
+    const { showMultiplayerLobby, peerSync, isHost, multiplayerInitialState,
+            autoJoinId, localName, players, gameKey } = this.state;
+
+    const p1Name = players ? players[0].name : (peerSync
+      ? (isHost
+          ? (multiplayerInitialState && multiplayerInitialState.p1Name) || 'Host'
+          : (multiplayerInitialState && multiplayerInitialState.p2Name) || 'Guest')
+      : 'P1');
+    const p2Name = players ? players[1].name : (peerSync
+      ? (isHost
+          ? (multiplayerInitialState && multiplayerInitialState.p2Name) || 'Guest'
+          : (multiplayerInitialState && multiplayerInitialState.p1Name) || 'Host')
+      : 'P2/CPU');
 
     const rowScoreString = peerSync
-      ? (isHost ? "Your Score (Rows): " : "Opponent Score (Rows): ") + this.state.rowScoreboard
-      : "P1 Score (Row): " + this.state.rowScoreboard;
+      ? `${isHost ? 'Your' : "Opponent's"} Score (Rows – ${p1Name}): ${this.state.rowScoreboard}`
+      : `${p1Name} Score (Rows): ${this.state.rowScoreboard}`;
     const colScoreString = peerSync
-      ? (isHost ? "Opponent Score (Cols): " : "Your Score (Cols): ") + this.state.colScoreboard
-      : "P2/CPU Score (Col): " + this.state.colScoreboard;
+      ? `${isHost ? "Opponent's" : 'Your'} Score (Cols – ${p2Name}): ${this.state.colScoreboard}`
+      : `${p2Name} Score (Cols): ${this.state.colScoreboard}`;
+
+    // Game type label
+    let gameTypeLabel = '';
+    if (peerSync) {
+      gameTypeLabel = '2-player game (online)';
+    } else if (players) {
+      const humanCount = players.filter(p => p.type === 'human').length;
+      if (humanCount === 2) gameTypeLabel = '2-player game (local)';
+      else if (humanCount === 1) gameTypeLabel = '1-player game (vs CPU)';
+      else gameTypeLabel = 'CPU vs CPU';
+    }
 
     return (
       <>
         <a href="#main-content" className="skip-link">Skip to main content</a>
         <header>
           <h1>Cribbage Grid</h1>
+          {gameTypeLabel && (
+            <p style={{ margin: '0 0 8px', color: '#555', fontSize: '14px' }}>{gameTypeLabel}</p>
+          )}
         </header>
         <main id="main-content">
           {showMultiplayerLobby && (
             <MultiplayerLobby
-              onConnected={(ps, ih, gs) => this.handleMultiplayerConnected(ps, ih, gs)}
+              autoJoinId={autoJoinId}
+              localName={localName}
+              onConnected={(ps, ih, gs, name) => this.handleMultiplayerConnected(ps, ih, gs, name)}
               onCancel={() => this.setState({ showMultiplayerLobby: false })}
             />
           )}
+
+          {/* Game setup screen (single-player only, shown before first game or after reset) */}
+          {!peerSync && !players && !showMultiplayerLobby && (
+            <GameSetupScreen onStart={(p) => this.handleSetupStart(p)} />
+          )}
+
           <h2>{rowScoreString}</h2>
           <h2>{colScoreString}</h2>
+
           {!peerSync ? (
             <button
               style={{ ...btnStyle, marginBottom: '16px' }}
@@ -906,15 +1392,27 @@ class MultiRoundCribbageGame extends React.Component {
               Exit Multiplayer
             </button>
           )}
-          {/* key forces a clean remount when switching between single-player and
-              multiplayer so the new initial state / peer connection takes effect */}
-          <CribbageGame
-            key={peerSync ? 'multiplayer' : 'singleplayer'}
-            peerSync={peerSync}
-            isHost={isHost}
-            initialGameState={multiplayerInitialState}
-            resetCallback={(r, c) => this.updateScore(r, c)}
-          />
+
+          {players && (
+            <button
+              style={{ ...cancelBtnStyle, marginBottom: '16px' }}
+              onClick={() => this.setState({ players: null, gameKey: gameKey + 1 })}
+            >
+              ↩ New Setup
+            </button>
+          )}
+
+          {/* Only render game when setup is done (single-player) or in multiplayer */}
+          {(players || peerSync) && (
+            <CribbageGame
+              key={`game-${peerSync ? 'multiplayer' : 'singleplayer'}-${gameKey}`}
+              peerSync={peerSync}
+              isHost={isHost}
+              initialGameState={multiplayerInitialState}
+              players={players}
+              resetCallback={(r, c) => this.updateScore(r, c)}
+            />
+          )}
         </main>
       </>
     );
@@ -929,18 +1427,6 @@ ReactDOM.render(
   <MultiRoundCribbageGame />,
   document.getElementById('root')
 );
-
-// var testHand = [{rank: '5', suit: 'spades'},
-//                 {rank: 'king', suit: 'spades'},
-//                 {rank: 'queen', suit: 'spades'},
-//                 {rank: 'king', suit: 'spades'},
-//                 {rank: 'jack', suit: 'clubs'},];
-
-// console.log("Hand:", testHand);
-// console.log("Score 15: ", score15(testHand));
-// console.log("Score Pair: ", scorePairs(testHand));
-// console.log("Score Run: ", scoreRuns(testHand));
-// console.log("Score Flush: ", scoreFlush(testHand));
 
 // ========================================
 
@@ -1016,13 +1502,11 @@ function score15(hand) {
 }
 
 function scoreRuns(hand) {
-  // Get all numerical ranks in order.
   let numbers = hand.map( (x) => convertRankToNumber(x.rank));
   numbers.sort(function(a, b){return a-b});
-  numbers.push(1000); // for the following loop to be easy.
+  numbers.push(1000);
 
 
-  // Go through and see if we have runs.
   var score  = 0;
   var duplicity = 1;
   var currentLength = 1;
@@ -1038,7 +1522,7 @@ function scoreRuns(hand) {
       duplicity = 1;
       currentLength += 1;
     }
-    else { // broken sequence
+    else {
       if (currentLength > 2) {
         score += (currentLength * multiple * duplicity);
       }
@@ -1066,7 +1550,6 @@ function scoreHand(hand) {
 //===========================CPU NEXT MOVE LOGIC===========================
 //=========================================================================
 
-// Load the required ratings JSON file.
 let cardRatings = require('./ratings.json');
 
 function convertLayoutToGrid(cardLayout) {
@@ -1096,10 +1579,8 @@ function getCardRatings(subset) {
     return cardRatings["0"];
   }
   else {
-    // Convert to numbers and sort into ascending order.
     let numbers = realCards.map((x) => convertRankToNumber(x.rank));
     numbers.sort((a, b) => a - b);
-    // Convert to an ID.
     let handId = 0;
     for (const n of numbers) {
       handId *= 14;
@@ -1125,32 +1606,25 @@ function getNextMoveRatings(cardLayout, nextCard) {
 
   let array2d = convertLayoutToGrid(cardLayout);
 
-  // Iterate through array tracking score and index at each spot.
   let openIndices = [];
   let netRatings = [];
 
   for (let row = 0 ; row < 5 ; row++) {
     for (let col = 0 ; col < 5 ; col ++) {
-      // If spot filled, skip past it. Can't place here.
       if (array2d[row][col].rank) {
         continue;
       }
       
-      // check the value of placing the card at each position in the grid.
       let baselineRowRating = getRowRating(array2d, row);
       let baselineColRating = getColRating(array2d, col);
 
-      // place the card into this spot.
       array2d[row][col] = nextCard;
 
-      // calculate new score
       let newRowRating = getRowRating(array2d, row);
       let newColRating = getColRating(array2d, col);
       
-      // Put null card back in.
       array2d[row][col] = {rank: null, suit: null};
 
-      // check score differential.
       let scoreDiff = (newColRating - newRowRating) - (baselineColRating - baselineRowRating);
       
       openIndices.push(row*5 + col);
@@ -1160,21 +1634,14 @@ function getNextMoveRatings(cardLayout, nextCard) {
   return [openIndices, netRatings];
 }
 
-/** Weighted soft max of values, multiply by alpha first.
- * 
- * @param {Array[number]} values 
- * @param {number} alpha 
- */
+/** Weighted soft max of values, multiply by alpha first. */
 function softmax(values, alpha) {
   let ans = values.map((x) => Math.exp(x*alpha));
   let sum = ans.reduce((a,b) => a+b, 0);
   return ans.map((x) => x/sum);
 }
 
-/** Return random index according to weights in values
- * 
- * @param {Array[number]} values Must be a prob distribution.
- */
+/** Return random index according to weights in values (probability distribution). */
 function pickIndex(values) {
   let i = 0, total=0;
   const r = Math.random();
@@ -1185,17 +1652,31 @@ function pickIndex(values) {
       return i;
     }
   }
-  console.assert(false, "Should not reach here in weighted random sampling");
-  return values.length-1;
+  return values.length - 1;
 }
 
-function getNextMove(cardLayout, nextCard, cpuLevel) {
-  let [openIndices, netRatings] = getNextMoveRatings(cardLayout, nextCard);
-  if (openIndices.length === 0) {
-    return null;
-  }
-  let alpha = (cpuLevel === 10)? 10 : Math.max(cpuLevel-1, 0) / 2.5;
-  console.log(`Alpha : ${alpha}`);
-  let softMaxRatings = softmax(netRatings, alpha);
-  return openIndices[pickIndex(softMaxRatings)];
+/**
+ * Choose the best (handIndex, gridIndex) for the CPU from its hand.
+ * Returns {handIndex, gridIndex} or null if no move available.
+ */
+function getCpuHandMove(cardLayout, hand, cpuLevel) {
+  if (!hand || hand.length === 0) return null;
+
+  let allChoices = [];
+
+  hand.forEach((card, hIdx) => {
+    if (!card || !card.rank) return;
+    const [openIndices, netRatings] = getNextMoveRatings(cardLayout, card);
+    openIndices.forEach((gridIdx, i) => {
+      allChoices.push({ handIndex: hIdx, gridIndex: gridIdx, rating: netRatings[i] });
+    });
+  });
+
+  if (allChoices.length === 0) return null;
+
+  const ratings = allChoices.map(c => c.rating);
+  const alpha = (cpuLevel === 10) ? 10 : Math.max(cpuLevel - 1, 0) / 2.5;
+  const probs = softmax(ratings, alpha);
+  return allChoices[pickIndex(probs)];
 }
+
