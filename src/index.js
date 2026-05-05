@@ -898,6 +898,31 @@ function countValidPlacements(cardLayout) {
   return count;
 }
 
+/**
+ * Compute the sum of all row scores and all column scores from a flat cardLayout array.
+ * Only lines with 2 or more cards are scored (matching CardGrid behaviour).
+ */
+function computeGridScores(cardLayout) {
+  let rowTotal = 0;
+  let colTotal = 0;
+  for (let line = 0; line < GRID_SIZE; line++) {
+    const rowCards = [];
+    for (let c = 0; c < GRID_SIZE; c++) {
+      const card = cardLayout[line * GRID_SIZE + c];
+      if (card && card.rank) rowCards.push(card);
+    }
+    if (rowCards.length > 1) rowTotal += scoreHand(rowCards);
+
+    const colCards = [];
+    for (let r = 0; r < GRID_SIZE; r++) {
+      const card = cardLayout[r * GRID_SIZE + line];
+      if (card && card.rank) colCards.push(card);
+    }
+    if (colCards.length > 1) colTotal += scoreHand(colCards);
+  }
+  return { rowTotal, colTotal };
+}
+
 // =========================================================
 // CardGrid
 // =========================================================
@@ -1051,17 +1076,20 @@ class CribbageGame extends React.Component {
 
     if (props.initialGameState) {
       // Multiplayer: use the shared initial state from the host
+      const initLayout = props.initialGameState.cardLayout;
       this.state = {
         deck: props.initialGameState.deck,
         p1Hand: props.initialGameState.p1Hand || [],
         p2Hand: props.initialGameState.p2Hand || [],
-        cardLayout: props.initialGameState.cardLayout,
+        cardLayout: initLayout,
         rowTurn: props.initialGameState.rowTurn,
         selectedHandIndex: null,
         p1Name: props.initialGameState.p1Name || 'Host',
         p2Name: props.initialGameState.p2Name || 'Guest',
         cardsPlacedThisTurn: 0,
         placementError: null,
+        lastTurnInfo: null,
+        turnStartScores: computeGridScores(initLayout),
       };
     } else {
       const deck = makeDeck();
@@ -1083,6 +1111,8 @@ class CribbageGame extends React.Component {
         selectedHandIndex: null,
         cardsPlacedThisTurn: 0,
         placementError: null,
+        lastTurnInfo: null,
+        turnStartScores: computeGridScores(cl),
       };
     }
   }
@@ -1102,6 +1132,8 @@ class CribbageGame extends React.Component {
           // Update names when they arrive (joiner sends back p2Name on first sync)
           p1Name: newState.p1Name || this.state.p1Name,
           p2Name: newState.p2Name || this.state.p2Name,
+          lastTurnInfo: newState.lastTurnInfo || null,
+          turnStartScores: newState.turnStartScores || this.state.turnStartScores,
         });
       });
     } else {
@@ -1163,6 +1195,8 @@ class CribbageGame extends React.Component {
       selectedHandIndex: null,
       cardsPlacedThisTurn: 0,
       placementError: null,
+      lastTurnInfo: null,
+      turnStartScores: computeGridScores(cl),
     };
 
     if (this.props.peerSync) {
@@ -1233,6 +1267,8 @@ class CribbageGame extends React.Component {
       selectedHandIndex: null,
       cardsPlacedThisTurn: this.state.cardsPlacedThisTurn + 1,
       placementError: null,
+      lastTurnInfo: this.state.lastTurnInfo,
+      turnStartScores: this.state.turnStartScores,
     };
 
     if (this.props.peerSync) {
@@ -1248,8 +1284,19 @@ class CribbageGame extends React.Component {
     // Multiplayer: only the active player can end the turn
     if (this.props.peerSync && !this.isMyTurn()) return;
 
-    const { deck, p1Hand, p2Hand, cardLayout } = this.state;
-    const newRowTurn = !this.state.rowTurn;
+    const { deck, p1Hand, p2Hand, cardLayout, rowTurn, cardsPlacedThisTurn, turnStartScores } = this.state;
+    const newRowTurn = !rowTurn;
+
+    // Compute score delta for this turn
+    const currentScores = computeGridScores(cardLayout);
+    const rowDelta = currentScores.rowTotal - (turnStartScores ? turnStartScores.rowTotal : 0);
+    const colDelta = currentScores.colTotal - (turnStartScores ? turnStartScores.colTotal : 0);
+    const lastTurnInfo = {
+      wasRowTurn: rowTurn,
+      rowDelta,
+      colDelta,
+      cardsPlaced: cardsPlacedThisTurn,
+    };
 
     const newState = {
       deck,
@@ -1260,6 +1307,8 @@ class CribbageGame extends React.Component {
       selectedHandIndex: null,
       cardsPlacedThisTurn: 0,
       placementError: null,
+      lastTurnInfo,
+      turnStartScores: currentScores,
     };
 
     if (this.props.peerSync) {
@@ -1323,6 +1372,8 @@ class CribbageGame extends React.Component {
       selectedHandIndex: null,
       cardsPlacedThisTurn: newCardsPlaced,
       placementError: null,
+      lastTurnInfo: this.state.lastTurnInfo,
+      turnStartScores: this.state.turnStartScores,
     };
 
     this.setState(newState, () => {
@@ -1338,7 +1389,7 @@ class CribbageGame extends React.Component {
 
   render() {
     const { cardLayout, rowTurn, p1Hand, p2Hand, selectedHandIndex, deck,
-            cardsPlacedThisTurn, placementError,
+            cardsPlacedThisTurn, placementError, lastTurnInfo,
             p1Name: stateP1Name, p2Name: stateP2Name } = this.state;
     const { peerSync, isHost, players } = this.props;
 
@@ -1427,6 +1478,35 @@ class CribbageGame extends React.Component {
           selectedHandCard={selectedCardForGrid}
         />
         <br />
+
+        {/* Last-turn score summary */}
+        {lastTurnInfo && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              display: 'inline-block',
+              margin: '8px 0 12px',
+              padding: '10px 16px',
+              borderRadius: '6px',
+              backgroundColor: '#e8f5e9',
+              border: '1px solid #a5d6a7',
+              fontSize: '14px',
+              lineHeight: '1.6',
+            }}
+          >
+            <strong>
+              Last turn –{' '}
+              {lastTurnInfo.wasRowTurn ? resolvedP1Name : resolvedP2Name}
+              {' '}({lastTurnInfo.wasRowTurn ? 'rows' : 'cols'}):
+            </strong>{' '}
+            placed {lastTurnInfo.cardsPlaced} card{lastTurnInfo.cardsPlaced !== 1 ? 's' : ''}
+            {' · '}
+            Row pts: <strong>{lastTurnInfo.rowDelta > 0 ? `+${lastTurnInfo.rowDelta}` : lastTurnInfo.rowDelta}</strong>
+            {' · '}
+            Col pts: <strong>{lastTurnInfo.colDelta > 0 ? `+${lastTurnInfo.colDelta}` : lastTurnInfo.colDelta}</strong>
+          </div>
+        )}
 
         {/* Hand displays */}
         {!peerSync && (
