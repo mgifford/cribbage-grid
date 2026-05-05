@@ -124,7 +124,7 @@ class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       const { error, info } = this.state;
       return (
-        <div style={{ padding: '24px', fontFamily: 'monospace', color: '#c00' }}>
+        <div role="alert" aria-live="assertive" style={{ padding: '24px', fontFamily: 'monospace', color: '#c00' }}>
           <h2>Something went wrong</h2>
           <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             {error && (error.message || String(error))}
@@ -138,10 +138,11 @@ class ErrorBoundary extends React.Component {
             </details>
           )}
           <button
+            aria-label="Reload the page to restart the game"
             style={{ marginTop: '16px', padding: '8px 16px', cursor: 'pointer' }}
-            onClick={() => this.setState({ hasError: false, error: null, info: null })}
+            onClick={() => window.location.reload()}
           >
-            Try to recover
+            Reload page
           </button>
         </div>
       );
