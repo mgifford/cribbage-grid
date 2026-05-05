@@ -1,6 +1,81 @@
+/* ====================================================
+   CSS custom properties – light mode defaults
+   ==================================================== */
+:root {
+  --card-bg: #ffffff;
+  --card-empty-bg: #f0f0f0;
+  --card-border: #aaaaaa;
+  --card-empty-border: #cccccc;
+  --card-back-bg: #1565c0;
+  --card-back-border: #0d47a1;
+  --card-red: #c62828;
+  --card-black: #212121;
+  --card-empty-color: #999999;
+  --card-shadow: rgba(0, 0, 0, 0.18);
+  --page-bg: #f5f5f5;
+  --page-text: #212121;
+  --header-bg: #ffffff;
+  --hand-active-bg: #e3f2fd;
+  --hand-inactive-bg: #f5f5f5;
+  --hand-active-border: #1976d2;
+  --hand-inactive-border: #cccccc;
+  --hand-label-color: #444444;
+  --last-turn-bg: #e8f5e9;
+  --last-turn-border: #a5d6a7;
+  --score-label-color: #555555;
+  --board-inactive-bg: #e8e8e8;
+  --board-inactive-opacity: 0;
+  --modal-bg: #ffffff;
+  --input-border: #999999;
+  --input-bg: #ffffff;
+  --input-text: #212121;
+  --placeable-outline: #1976d2;
+  --score-header-bg: transparent;
+}
+
+/* ====================================================
+   Dark mode overrides
+   ==================================================== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --card-bg: #2c2c2c;
+    --card-empty-bg: #1a1a1a;
+    --card-border: #555555;
+    --card-empty-border: #3a3a3a;
+    --card-back-bg: #1565c0;
+    --card-back-border: #42a5f5;
+    --card-red: #ef9a9a;
+    --card-black: #e0e0e0;
+    --card-empty-color: #555555;
+    --card-shadow: rgba(0, 0, 0, 0.5);
+    --page-bg: #121212;
+    --page-text: #e0e0e0;
+    --header-bg: #1e1e1e;
+    --hand-active-bg: #0d2137;
+    --hand-inactive-bg: #1e1e1e;
+    --hand-active-border: #42a5f5;
+    --hand-inactive-border: #3a3a3a;
+    --hand-label-color: #bbbbbb;
+    --last-turn-bg: #1b3327;
+    --last-turn-border: #2e7d32;
+    --score-label-color: #aaaaaa;
+    --board-inactive-bg: #1a1a1a;
+    --board-inactive-opacity: 0;
+    --modal-bg: #1e1e1e;
+    --input-border: #555555;
+    --input-bg: #2c2c2c;
+    --input-text: #e0e0e0;
+    --placeable-outline: #42a5f5;
+    --score-header-bg: transparent;
+  }
+}
+
 body {
   font: 14px "Century Gothic", Futura, sans-serif;
   margin: 20px;
+  background-color: var(--page-bg);
+  color: var(--page-text);
+  transition: background-color 0.2s, color 0.2s;
 }
 
 ol, ul {
@@ -18,8 +93,8 @@ ol, ul {
 }
 
 .square {
-  background: #fff;
-  border: 1px solid #999;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   float: left;
   font-size: 24px;
   font-weight: bold;
@@ -73,7 +148,55 @@ ol, ul {
   border-radius: 0 0 4px 0;
 }
 
-.skip-link:focus {
-  top: 0;
+/* Card table layout */
+table {
+  border-collapse: separate;
+  border-spacing: 4px;
+}
+
+/* Score headers in the grid */
+th.score-header {
+  text-align: center;
+  padding: 2px 4px;
+  color: var(--score-label-color);
+}
+
+/* Inactive board cells (not part of the random blob) */
+.board-cell-inactive {
+  visibility: hidden;
+}
+
+/* Card tile – base styles (complements inline styles) */
+.card-tile {
+  box-sizing: border-box;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.card-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px var(--card-shadow);
+}
+
+/* Modal / dialog – dark-mode aware */
+.modal-box {
+  background-color: var(--modal-bg);
+  color: var(--page-text);
+}
+
+/* Form inputs */
+.form-input {
+  background-color: var(--input-bg);
+  color: var(--input-text);
+  border: 1px solid var(--input-border);
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .card-tile {
+    transition: none;
+  }
+  .card-tile:hover {
+    transform: none;
+  }
 }
 

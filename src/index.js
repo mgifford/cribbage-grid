@@ -24,6 +24,55 @@ const NUM_DECKS = Math.ceil(CELLS / 52);
 // Maximum cards allowed in a single row or column (standard cribbage hand size).
 const MAX_CARDS_PER_LINE = 5;
 
+// Card tile dimensions (square Scrabble-tile style)
+const CARD_SIZE = 64;
+const SUIT_FONT_SIZE = 44;
+const RANK_FONT_SIZE = 17;
+
+// =========================================================
+// Board shape generator – creates a random connected blob
+// =========================================================
+
+/**
+ * Generate a random connected board mask (Set of active cell indices).
+ * The blob always includes CENTER and grows via BFS with random selection,
+ * producing a different shape each game.
+ * @param {number} gridSize  Side length of the square grid.
+ * @returns {Set<number>}    Set of active cell indices.
+ */
+function generateBoardMask(gridSize) {
+  const cells = gridSize * gridSize;
+  const center = Math.floor(cells / 2);
+
+  function getNeighbors(idx) {
+    const row = Math.floor(idx / gridSize);
+    const col = idx % gridSize;
+    const result = [];
+    if (row > 0)              result.push(idx - gridSize);
+    if (row < gridSize - 1)   result.push(idx + gridSize);
+    if (col > 0)              result.push(idx - 1);
+    if (col < gridSize - 1)   result.push(idx + 1);
+    return result;
+  }
+
+  const active = new Set([center]);
+  const frontier = new Set(getNeighbors(center));
+  // Target 28–36 active cells to give a varied but playable board
+  const target = 28 + Math.floor(Math.random() * 9);
+
+  while (active.size < target && frontier.size > 0) {
+    const frontierArr = [...frontier];
+    const cell = frontierArr[Math.floor(Math.random() * frontierArr.length)];
+    frontier.delete(cell);
+    active.add(cell);
+    for (const n of getNeighbors(cell)) {
+      if (!active.has(n)) frontier.add(n);
+    }
+  }
+
+  return active;
+}
+
 // =========================================================
 // PeerSync – thin wrapper around PeerJS for state syncing
 // =========================================================
@@ -171,7 +220,8 @@ const overlayStyle = {
 };
 
 const modalStyle = {
-  backgroundColor: '#fff',
+  backgroundColor: 'var(--modal-bg)',
+  color: 'var(--page-text)',
   padding: '32px 40px',
   borderRadius: '10px',
   textAlign: 'center',
@@ -204,7 +254,9 @@ const inputStyle = {
   width: '100%',
   marginBottom: '12px',
   borderRadius: '4px',
-  border: '1px solid #999',
+  border: '1px solid var(--input-border)',
+  backgroundColor: 'var(--input-bg)',
+  color: 'var(--input-text)',
   boxSizing: 'border-box',
 };
 
@@ -213,8 +265,8 @@ const lastTurnStyle = {
   margin: '8px 0 12px',
   padding: '10px 16px',
   borderRadius: '6px',
-  backgroundColor: '#e8f5e9',
-  border: '1px solid #a5d6a7',
+  backgroundColor: 'var(--last-turn-bg)',
+  border: '1px solid var(--last-turn-border)',
   fontSize: '14px',
   lineHeight: '1.6',
 };
@@ -629,18 +681,19 @@ class Deck extends React.Component {
   render() {
     const label = this.props.isEmpty ? "Empty deck" : "Start next round";
     const deckStyle = {
-      width: '50px',
-      height: '70px',
-      borderRadius: '4px',
-      border: this.props.isEmpty ? '1px dashed #ccc' : '2px solid #1565c0',
-      backgroundColor: this.props.isEmpty ? '#f5f5f5' : '#1565c0',
+      width: `${CARD_SIZE}px`,
+      height: `${CARD_SIZE}px`,
+      borderRadius: '6px',
+      border: this.props.isEmpty ? '1px dashed var(--card-empty-border)' : '2px solid #1565c0',
+      backgroundColor: this.props.isEmpty ? 'var(--card-empty-bg)' : '#1565c0',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       color: '#fff',
-      fontSize: '22px',
+      fontSize: '28px',
       cursor: this.props.isEmpty ? 'default' : 'pointer',
       userSelect: 'none',
+      boxShadow: this.props.isEmpty ? 'none' : '0 2px 6px var(--card-shadow)',
     };
     return (
       <button
@@ -701,45 +754,57 @@ function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, sel
   const description = ariaLabel || cardDescription(rank, suit, showBack);
 
   const selectedBorderStyle = selected
-    ? { outline: '3px solid #f57c00', outlineOffset: '2px', borderRadius: '4px' }
+    ? { outline: '3px solid #f57c00', outlineOffset: '2px', borderRadius: '6px' }
     : {};
 
-  const textColor = (rank && suit) ? (isRedSuit(suit) ? CARD_RED_COLOR : CARD_BLACK_COLOR) : '#bbb';
+  const isRed = rank && suit && isRedSuit(suit);
+  const suitColor = isRed ? 'var(--card-red)' : 'var(--card-black)';
 
   let cardInner;
   if (showBack) {
     cardInner = (
-      <div style={{
-        width: '50px', height: '70px', borderRadius: '4px',
-        backgroundColor: '#1565c0', border: '2px solid #0d47a1',
+      <div className="card-tile" style={{
+        width: `${CARD_SIZE}px`, height: `${CARD_SIZE}px`, borderRadius: '6px',
+        backgroundColor: 'var(--card-back-bg)', border: '2px solid var(--card-back-border)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: '0 2px 6px var(--card-shadow)',
       }}>
-        <span style={{ color: '#fff', fontSize: '22px' }} aria-hidden="true">🂠</span>
+        <span style={{ color: '#fff', fontSize: '32px' }} aria-hidden="true">🂠</span>
       </div>
     );
   } else if (rank && suit) {
     const r = rankDisplay(rank);
     const s = suitSymbol(suit);
     cardInner = (
-      <div style={{
-        width: '50px', height: '70px', borderRadius: '4px',
-        backgroundColor: '#fff', border: '1px solid #999',
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        position: 'relative', color: textColor, fontWeight: 'bold',
-        fontFamily: 'Georgia, serif',
-        userSelect: 'none',
+      <div className="card-tile" style={{
+        width: `${CARD_SIZE}px`, height: `${CARD_SIZE}px`, borderRadius: '6px',
+        backgroundColor: 'var(--card-bg)', border: '1px solid var(--card-border)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'relative', color: suitColor,
+        fontFamily: 'Georgia, serif', userSelect: 'none',
+        boxShadow: '0 2px 6px var(--card-shadow)',
+        overflow: 'hidden',
       }}>
-        <span style={{ position: 'absolute', top: '3px', left: '5px', fontSize: '13px', lineHeight: 1 }}>{r}</span>
-        <span style={{ fontSize: '24px', lineHeight: 1 }} aria-hidden="true">{s}</span>
-        <span style={{ position: 'absolute', bottom: '3px', right: '5px', fontSize: '13px', lineHeight: 1, transform: 'rotate(180deg)', display: 'inline-block' }}>{r}</span>
+        {/* Large suit symbol fills most of the tile */}
+        <span style={{
+          fontSize: `${SUIT_FONT_SIZE}px`, lineHeight: 1,
+          opacity: 0.9,
+        }} aria-hidden="true">{s}</span>
+        {/* Rank badge at top-left */}
+        <span style={{
+          position: 'absolute', top: '3px', left: '5px',
+          fontSize: `${RANK_FONT_SIZE}px`, lineHeight: 1,
+          fontWeight: '900', color: suitColor,
+          textShadow: '0 0 4px rgba(255,255,255,0.9), 0 0 2px rgba(255,255,255,0.7)',
+        }}>{r}</span>
       </div>
     );
   } else {
     cardInner = (
-      <div style={{
-        width: '50px', height: '70px', borderRadius: '4px',
-        backgroundColor: '#f5f5f5', border: '1px dashed #ccc',
+      <div className="card-tile" style={{
+        width: `${CARD_SIZE}px`, height: `${CARD_SIZE}px`, borderRadius: '6px',
+        backgroundColor: 'var(--card-empty-bg)',
+        border: '1px dashed var(--card-empty-border)',
       }} aria-hidden="true" />
     );
   }
@@ -801,17 +866,17 @@ function HandDisplay({ hand, selectedIndex, onCardClick, label, faceDown, isActi
   const containerStyle = {
     margin: '12px 0',
     padding: '10px',
-    backgroundColor: isActive ? '#e3f2fd' : '#f5f5f5',
+    backgroundColor: isActive ? 'var(--hand-active-bg)' : 'var(--hand-inactive-bg)',
     borderRadius: '8px',
-    border: isActive ? '2px solid #1976d2' : '1px solid #ccc',
+    border: isActive ? '2px solid var(--hand-active-border)' : '1px solid var(--hand-inactive-border)',
     display: 'inline-block',
   };
 
   return (
     <div style={containerStyle}>
-      <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#444' }}>
+      <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: 'var(--hand-label-color)' }}>
         {label}
-        {isActive && <span style={{ color: '#1976d2', marginLeft: '8px' }}>← click a card to select it</span>}
+        {isActive && <span style={{ color: 'var(--hand-active-border)', marginLeft: '8px' }}>← click a card to select it</span>}
       </div>
       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
         {hand.map((card, i) => {
@@ -907,11 +972,13 @@ function countCardsInCol(cardLayout, col) {
  * Count empty cells where a card can still legally be placed:
  * cell must be empty, and neither its row nor its column already
  * has MAX_CARDS_PER_LINE cards in it.
+ * @param {Set<number>|null} boardMask  Active cell set; null = all cells active.
  */
-function countValidPlacements(cardLayout) {
+function countValidPlacements(cardLayout, boardMask = null) {
   let count = 0;
   for (let i = 0; i < CELLS; i++) {
     if (i === CENTER) continue;
+    if (boardMask && !boardMask.has(i)) continue;
     if (cardLayout[i].rank) continue;
     const row = Math.floor(i / GRID_SIZE);
     const col = i % GRID_SIZE;
@@ -978,10 +1045,12 @@ function validateTurnLine(turnCells, newCell) {
 /**
  * Count cells valid for placement on the current turn
  * (considering adjacency and straight-line constraints).
+ * @param {Set<number>|null} boardMask  Active cell set; null = all cells active.
  */
-function countValidTurnPlacements(cardLayout, turnCells) {
+function countValidTurnPlacements(cardLayout, turnCells, boardMask = null) {
   let count = 0;
   for (let i = 0; i < CELLS; i++) {
+    if (boardMask && !boardMask.has(i)) continue;
     if (cardLayout[i].rank) continue;
     const row = Math.floor(i / GRID_SIZE);
     const col = i % GRID_SIZE;
@@ -1123,6 +1192,18 @@ function dealHandsMulti(deck, numPlayers) {
 
 class CardGrid extends React.Component {
   renderCard(i) {
+    const boardMask = this.props.boardMask;
+    // Inactive cell – render an invisible placeholder to preserve grid layout
+    if (boardMask && !boardMask.has(i)) {
+      return (
+        <div
+          className="board-cell-inactive"
+          style={{ width: `${CARD_SIZE}px`, height: `${CARD_SIZE}px` }}
+          aria-hidden="true"
+        />
+      );
+    }
+
     const row = Math.floor(i / GRID_SIZE) + 1;
     const col = (i % GRID_SIZE) + 1;
     const card = this.props.cardLayout[i];
@@ -1137,7 +1218,7 @@ class CardGrid extends React.Component {
         suit={card.suit}
         clickHandler={() => this.props.clickHandler(i)}
         aria-label={posLabel}
-        style={isPlaceable ? { outline: '2px dashed #1976d2', borderRadius: '4px' } : {}}
+        style={isPlaceable ? { outline: '2px dashed var(--placeable-outline)', borderRadius: '6px' } : {}}
       />
     );
   }
@@ -1175,6 +1256,25 @@ class CardGrid extends React.Component {
     return this.getLineScores(indices, maxes, GRID_SIZE);
   }
 
+  /** Returns true if a given row has at least one active cell in the board mask. */
+  rowHasActiveCells(row) {
+    const boardMask = this.props.boardMask;
+    if (!boardMask) return true;
+    for (let c = 0; c < GRID_SIZE; c++) {
+      if (boardMask.has(row * GRID_SIZE + c)) return true;
+    }
+    return false;
+  }
+
+  /** Returns true if a given column has at least one active cell in the board mask. */
+  colHasActiveCells(col) {
+    const boardMask = this.props.boardMask;
+    if (!boardMask) return true;
+    for (let r = 0; r < GRID_SIZE; r++) {
+      if (boardMask.has(r * GRID_SIZE + col)) return true;
+    }
+    return false;
+  }
 
   /**
    * Given a row or col index and a direction ('row'|'col'), return the player
@@ -1221,17 +1321,18 @@ class CardGrid extends React.Component {
       );
     }
     for(let c = 0; c < GRID_SIZE; c++) {
+      if (!this.colHasActiveCells(c)) continue;
       const owner = this.ownerOf(c, 'col');
-      const ownerColor = owner >= 0 ? PLAYER_COLORS[owner % PLAYER_COLORS.length] : '#333';
+      const ownerColor = owner >= 0 ? PLAYER_COLORS[owner % PLAYER_COLORS.length] : 'var(--page-text)';
       topRowElements.push(
-        <th key={`col-score-${c}`} scope="col" style={{ color: ownerColor }}>
+        <th key={`col-score-${c}`} scope="col" style={{ color: ownerColor, textAlign: 'center', padding: '2px 4px' }}>
           <span className="sr-only">{`Column ${c + 1} score: `}</span>
           <span>{columnScores[c]}</span>
         </th>
       );
     }
     topRowElements.push(
-      <th key="col-total" scope="col">
+      <th key="col-total" scope="col" style={{ textAlign: 'center', padding: '2px 4px' }}>
         <span className="sr-only">Column total score: </span>
         <span style={{fontWeight: 'bold', fontSize: 24}}>{columnScoreTotal}</span>
       </th>
@@ -1240,26 +1341,32 @@ class CardGrid extends React.Component {
     // Game rows 1–GRID_SIZE
     let bodyRows = [];
     for (let row = 0; row < GRID_SIZE; row++) {
+      if (!this.rowHasActiveCells(row)) continue;
       const rowOwner = this.ownerOf(row, 'row');
-      const rowOwnerColor = rowOwner >= 0 ? PLAYER_COLORS[rowOwner % PLAYER_COLORS.length] : '#333';
+      const rowOwnerColor = rowOwner >= 0 ? PLAYER_COLORS[rowOwner % PLAYER_COLORS.length] : 'var(--page-text)';
       let rowElements = [];
       rowElements.push(
-        <th key="row-score" scope="row" style={{ color: rowOwnerColor }}>
+        <th key="row-score" scope="row" style={{ color: rowOwnerColor, textAlign: 'right', paddingRight: '4px' }}>
           <span className="sr-only">{`Row ${row + 1} score: `}</span>
           <span>{rowScores[row]}</span>
         </th>
       );
       for(let cardIndex = 0; cardIndex < GRID_SIZE; cardIndex++) {
         const ind = cardIndex + GRID_SIZE * row;
-        rowElements.push(<td key={`card-${ind}`}>{this.renderCard(ind)}</td>);
+        const isInactive = this.props.boardMask && !this.props.boardMask.has(ind);
+        rowElements.push(
+          <td key={`card-${ind}`} style={isInactive ? { padding: 0 } : undefined}>
+            {this.renderCard(ind)}
+          </td>
+        );
       }
       bodyRows.push(<tr key={`row-${row}`}>{rowElements}</tr>);
     }
 
     const numPlayers = this.props.zones ? this.props.zones.length : 2;
     const captionText = numPlayers === 2
-      ? `Cribbage Grid – ${GRID_SIZE}×${GRID_SIZE} card grid. P1 scores for rows (left totals); P2/CPU scores for columns (top totals).`
-      : `Cribbage Grid – ${GRID_SIZE}×${GRID_SIZE} card grid. ${numPlayers}-player game – row/column colours show each player's scoring zone.`;
+      ? `Cribbage Grid – variable-shape card grid. P1 scores for rows (left totals); P2/CPU scores for columns (top totals).`
+      : `Cribbage Grid – variable-shape card grid. ${numPlayers}-player game – row/column colours show each player's scoring zone.`;
 
     return (
       <table>
@@ -1310,6 +1417,7 @@ class CribbageGame extends React.Component {
         placementError: null,
         lastTurnInfo: null,
         turnStartScores: computeGridScores(initLayout),
+        boardMask: null, // online multiplayer uses full grid
       };
     } else {
       const numPlayers = (props.players && props.players.length) || 2;
@@ -1320,6 +1428,7 @@ class CribbageGame extends React.Component {
       let cl = Array(CELLS).fill(null).map(() => ({ rank: null, suit: null }));
       cl[CENTER] = deck[0];
 
+      const boardMask = generateBoardMask(GRID_SIZE);
       const zones = this._getZones(numPlayers, props.players);
       const { hands, remainingDeck } = dealHandsMulti(deck.slice(1), numPlayers);
 
@@ -1339,6 +1448,7 @@ class CribbageGame extends React.Component {
         p1Hand: hands[0],
         p2Hand: hands[1] || [],
         rowTurn: true,
+        boardMask,
       };
     }
   }
@@ -1412,7 +1522,7 @@ class CribbageGame extends React.Component {
     const idx = state.currentPlayerIndex;
     const player = players[idx];
     const hand = state.hands && state.hands[idx];
-    const hasValidCells = countValidTurnPlacements(state.cardLayout, []) > 0;
+    const hasValidCells = countValidTurnPlacements(state.cardLayout, [], state.boardMask) > 0;
     if (player && player.type === 'cpu' && hasValidCells && hand && hand.length > 0) {
       setTimeout(() => this.cpuMoveHandler(), 1200);
     }
@@ -1445,12 +1555,14 @@ class CribbageGame extends React.Component {
         placementError: null,
         lastTurnInfo: null,
         turnStartScores: computeGridScores(cl),
+        boardMask: null,
       };
       this.props.peerSync.state = newState;
       this.props.peerSync.sync();
       this.setState(newState, () => { this._maybeTriggerCpu(newState); });
     } else {
-      // Local N-player reset
+      // Local N-player reset – generate a new random board shape each round
+      const boardMask = generateBoardMask(GRID_SIZE);
       const numPlayers = (this.props.players && this.props.players.length) || 2;
       const zones = this._getZones(numPlayers, this.props.players);
       const { hands, remainingDeck } = dealHandsMulti(deck.slice(1), numPlayers);
@@ -1471,6 +1583,7 @@ class CribbageGame extends React.Component {
         p1Hand: hands[0],
         p2Hand: hands[1] || [],
         rowTurn: nextStart === 0,
+        boardMask,
       };
       this.setState(newState, () => { this._maybeTriggerCpu(newState); });
     }
@@ -1483,6 +1596,10 @@ class CribbageGame extends React.Component {
 
   handleGridClick(i) {
     if (this.state.cardLayout[i].rank) return; // already filled
+
+    // Reject clicks on cells outside the board mask
+    const { boardMask } = this.state;
+    if (boardMask && !boardMask.has(i)) return;
 
     if (this.props.peerSync) {
       // Online multiplayer path (2-player)
@@ -1717,7 +1834,7 @@ class CribbageGame extends React.Component {
   cpuMoveHandler() {
     if (this.props.peerSync) return; // CPU not used in online multiplayer
 
-    const { currentPlayerIndex, cardLayout, cardsPlacedThisTurn, hands, turnCells } = this.state;
+    const { currentPlayerIndex, cardLayout, cardsPlacedThisTurn, hands, turnCells, boardMask } = this.state;
     const players = this.props.players || this._defaultPlayers();
     const player = players[currentPlayerIndex];
     if (!player || player.type !== 'cpu') return;
@@ -1727,13 +1844,13 @@ class CribbageGame extends React.Component {
     const numPlayers = players.length;
 
     // Check if game is over (no placeable cells at all)
-    if (countValidPlacements(cardLayout) === 0) {
+    if (countValidPlacements(cardLayout, boardMask) === 0) {
       this.handleEndTurn();
       return;
     }
 
     // Check turn limits and valid turn placements
-    const validTurnCells = countValidTurnPlacements(cardLayout, turnCells);
+    const validTurnCells = countValidTurnPlacements(cardLayout, turnCells, boardMask);
     if (cardsPlacedThisTurn >= MAX_CARDS_PER_LINE || validTurnCells === 0) {
       this.handleEndTurn();
       return;
@@ -1741,7 +1858,7 @@ class CribbageGame extends React.Component {
 
     // Use zone-aware CPU for all player counts
     const zone = player.zone || this._getZones(numPlayers, players)[currentPlayerIndex];
-    const move = getCpuHandMoveForZone(cardLayout, hand, cpuLevel, zone, turnCells);
+    const move = getCpuHandMoveForZone(cardLayout, hand, cpuLevel, zone, turnCells, boardMask);
     if (!move) {
       this.handleEndTurn();
       return;
@@ -1755,7 +1872,7 @@ class CribbageGame extends React.Component {
     newLayout[gridIndex] = hand[handIndex];
     const newCardsPlaced = cardsPlacedThisTurn + 1;
     const newTurnCells = [...turnCells, gridIndex];
-    const nextValidTurnCells = countValidTurnPlacements(newLayout, newTurnCells);
+    const nextValidTurnCells = countValidTurnPlacements(newLayout, newTurnCells, boardMask);
 
     const newHands = hands.map((h, idx) => idx === currentPlayerIndex ? newHand : h);
 
@@ -1773,6 +1890,7 @@ class CribbageGame extends React.Component {
       p1Hand: newHands[0],
       p2Hand: newHands[1] || [],
       rowTurn: currentPlayerIndex === 0,
+      boardMask,
     };
 
     this.setState(newState, () => {
@@ -1797,13 +1915,13 @@ class CribbageGame extends React.Component {
   _renderOnlineMultiplayer() {
     const { cardLayout, p1Hand, p2Hand, selectedHandIndex, deck,
             cardsPlacedThisTurn, placementError, lastTurnInfo, turnCells,
-            p1Name: stateP1Name, p2Name: stateP2Name } = this.state;
+            p1Name: stateP1Name, p2Name: stateP2Name, boardMask } = this.state;
     const { isHost } = this.props;
 
     const resolvedP1Name = stateP1Name || 'Host';
     const resolvedP2Name = stateP2Name || 'Guest';
-    const roundOver = countValidPlacements(cardLayout) === 0 ||
-                      countValidTurnPlacements(cardLayout, []) === 0;
+    const roundOver = countValidPlacements(cardLayout, boardMask) === 0 ||
+                      countValidTurnPlacements(cardLayout, [], boardMask) === 0;
     const myTurn = this.isMyTurn();
     const myRole = isHost ? 'rows' : 'cols';
     const myName = isHost ? resolvedP1Name : resolvedP2Name;
@@ -1822,10 +1940,11 @@ class CribbageGame extends React.Component {
       ? (isHost ? p1Hand[selectedHandIndex] : p2Hand[selectedHandIndex])
       : null;
 
-    // Compute valid placement cells (considering adjacency + turn line)
+    // Compute valid placement cells (considering boardMask + adjacency + turn line)
     const validCellSet = new Set();
     if (!roundOver && isLocalHumanTurn) {
       for (let idx = 0; idx < CELLS; idx++) {
+        if (boardMask && !boardMask.has(idx)) continue;
         if (cardLayout[idx].rank) continue;
         const r = Math.floor(idx / GRID_SIZE);
         const c = idx % GRID_SIZE;
@@ -1867,7 +1986,7 @@ class CribbageGame extends React.Component {
       <div>
         <div aria-live="polite" aria-atomic="true" className="sr-only">{turnText}</div>
         <h3>{turnText}</h3>
-        <p style={{ color: '#555', fontSize: '14px', marginTop: 0 }}>
+        <p style={{ color: 'var(--score-label-color)', fontSize: '14px', marginTop: 0 }}>
           You are: <strong>{isHost ? `${resolvedP1Name} (rows)` : `${resolvedP2Name} (cols)`}</strong>
         </p>
         {turnLineText && (
@@ -1884,6 +2003,7 @@ class CribbageGame extends React.Component {
           selectedHandCard={selectedCardForGrid}
           validCells={validCellSet}
           zones={zones}
+          boardMask={boardMask}
         />
         <br />
         {lastTurnInfo && (
@@ -1932,13 +2052,13 @@ class CribbageGame extends React.Component {
   _renderLocalGame(players) {
     const { cardLayout, currentPlayerIndex, hands, selectedHandIndex, deck,
             cardsPlacedThisTurn, placementError, lastTurnInfo, turnCells,
-            playerBonuses } = this.state;
+            playerBonuses, boardMask } = this.state;
     const numPlayers = players.length;
     const currentPlayer = players[currentPlayerIndex];
     const zones = this._getZones(numPlayers, players);
 
-    const roundOver = countValidPlacements(cardLayout) === 0 ||
-                      countValidTurnPlacements(cardLayout, []) === 0;
+    const roundOver = countValidPlacements(cardLayout, boardMask) === 0 ||
+                      countValidTurnPlacements(cardLayout, [], boardMask) === 0;
 
     const isHumanTurn = currentPlayer && currentPlayer.type === 'human';
 
@@ -1961,10 +2081,11 @@ class CribbageGame extends React.Component {
 
     const playerColor = PLAYER_COLORS[currentPlayerIndex % PLAYER_COLORS.length];
 
-    // Compute valid placement cells (adjacency + turn line)
+    // Compute valid placement cells (boardMask + adjacency + turn line)
     const validCellSet = new Set();
     if (!roundOver && isHumanTurn) {
       for (let idx = 0; idx < CELLS; idx++) {
+        if (boardMask && !boardMask.has(idx)) continue;
         if (cardLayout[idx].rank) continue;
         const r = Math.floor(idx / GRID_SIZE);
         const c = idx % GRID_SIZE;
@@ -2017,6 +2138,7 @@ class CribbageGame extends React.Component {
           selectedHandCard={selectedCardForGrid}
           validCells={validCellSet}
           zones={zones}
+          boardMask={boardMask}
         />
         <br />
         {lastTurnInfo && (
@@ -2052,7 +2174,7 @@ class CribbageGame extends React.Component {
             );
           })}
         </div>
-        <p style={{ fontSize: '12px', color: '#888' }}>Cards remaining in deck: {deck.length}</p>
+        <p style={{ fontSize: '12px', color: 'var(--score-label-color)' }}>Cards remaining in deck: {deck.length}</p>
         {!roundOver && isHumanTurn && this._renderEndTurnButton(cardsPlacedThisTurn)}
         {placementError && (
           <p role="alert" style={{ color: '#c62828', fontSize: '14px', margin: '6px 0' }}>
@@ -2637,8 +2759,9 @@ function pickIndex(values) {
  * The CPU tries to maximise its own zone's score improvement.
  * @param {object} zone  { rows: number[], cols: number[] }
  * @param {number[]} turnCells  Cells already placed this turn (for straight-line constraint)
+ * @param {Set<number>|null} boardMask  Active cell set; null = all cells active.
  */
-function getNextMoveRatingsForZone(cardLayout, nextCard, zone, turnCells = []) {
+function getNextMoveRatingsForZone(cardLayout, nextCard, zone, turnCells = [], boardMask = null) {
   const array2d = convertLayoutToGrid(cardLayout);
   const openIndices = [];
   const netRatings = [];
@@ -2653,13 +2776,16 @@ function getNextMoveRatingsForZone(cardLayout, nextCard, zone, turnCells = []) {
     for (let col = 0; col < GRID_SIZE; col++) {
       if (array2d[row][col].rank) continue;
 
+      const cellIndex = row * GRID_SIZE + col;
+
+      // Board mask: skip inactive cells
+      if (boardMask && !boardMask.has(cellIndex)) continue;
+
       let colCount = 0;
       for (let r = 0; r < GRID_SIZE; r++) {
         if (array2d[r][col].rank) colCount++;
       }
       if (colCount >= MAX_CARDS_PER_LINE) continue;
-
-      const cellIndex = row * GRID_SIZE + col;
 
       // Adjacency constraint: must be adjacent to an existing card
       if (!isAdjacentToOccupied(cardLayout, cellIndex)) continue;
@@ -2694,14 +2820,15 @@ function getNextMoveRatingsForZone(cardLayout, nextCard, zone, turnCells = []) {
  * The CPU maximises score gains within its own assigned rows / cols.
  * Returns {handIndex, gridIndex} or null if no move is available.
  * @param {number[]} turnCells  Cells already placed this turn (for straight-line constraint)
+ * @param {Set<number>|null} boardMask  Active cell set; null = all cells active.
  */
-function getCpuHandMoveForZone(cardLayout, hand, cpuLevel, zone, turnCells = []) {
+function getCpuHandMoveForZone(cardLayout, hand, cpuLevel, zone, turnCells = [], boardMask = null) {
   if (!hand || hand.length === 0) return null;
 
   let allChoices = [];
   hand.forEach((card, hIdx) => {
     if (!card || !card.rank) return;
-    const [openIndices, netRatings] = getNextMoveRatingsForZone(cardLayout, card, zone, turnCells);
+    const [openIndices, netRatings] = getNextMoveRatingsForZone(cardLayout, card, zone, turnCells, boardMask);
     openIndices.forEach((gridIdx, i) => {
       allChoices.push({ handIndex: hIdx, gridIndex: gridIdx, rating: netRatings[i] });
     });
