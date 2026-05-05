@@ -102,6 +102,55 @@ class PeerSync {
 }
 
 // =========================================================
+// ErrorBoundary – catches render errors and shows them on screen
+// =========================================================
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, info: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    this.setState({ info });
+    console.error('Game error:', error, info && info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      const { error, info } = this.state;
+      return (
+        <div style={{ padding: '24px', fontFamily: 'monospace', color: '#c00' }}>
+          <h2>Something went wrong</h2>
+          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {error && (error.message || String(error))}
+          </pre>
+          {info && (
+            <details style={{ marginTop: '12px' }}>
+              <summary>Component stack</summary>
+              <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', color: '#333' }}>
+                {info.componentStack}
+              </pre>
+            </details>
+          )}
+          <button
+            style={{ marginTop: '16px', padding: '8px 16px', cursor: 'pointer' }}
+            onClick={() => this.setState({ hasError: false, error: null, info: null })}
+          >
+            Try to recover
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// =========================================================
 // Styles
 // =========================================================
 
@@ -920,8 +969,8 @@ class CribbageGame extends React.Component {
       shuffleDeck(deck);
 
       // center card
-      let cl = Array(25).fill(null).map(() => ({ rank: null, suit: null }));
-      cl[12] = deck[0];
+      let cl = Array(CELLS).fill(null).map(() => ({ rank: null, suit: null }));
+      cl[CENTER] = deck[0];
 
       // deal hands from the rest of the deck
       const { p1Hand, p2Hand, remainingDeck } = dealHands(deck.slice(1));
@@ -995,8 +1044,8 @@ class CribbageGame extends React.Component {
     let deck = makeDeck();
     shuffleDeck(deck);
 
-    let cl = Array(25).fill(null).map(() => ({ rank: null, suit: null }));
-    cl[12] = deck[0];
+    let cl = Array(CELLS).fill(null).map(() => ({ rank: null, suit: null }));
+    cl[CENTER] = deck[0];
 
     const { p1Hand, p2Hand, remainingDeck } = dealHands(deck.slice(1));
 
@@ -1131,7 +1180,7 @@ class CribbageGame extends React.Component {
     const resolvedP2Name = peerSync ? (stateP2Name || 'Guest') : p2Config.name;
 
     // Determine round-over: all 24 non-center cells filled
-    const emptyCells = cardLayout.filter((c, idx) => idx !== 12 && !c.rank).length;
+    const emptyCells = cardLayout.filter((c, idx) => idx !== CENTER && !c.rank).length;
     const roundOver = emptyCells === 0;
 
     // Turn text
@@ -1490,7 +1539,9 @@ class MultiRoundCribbageGame extends React.Component {
 // ========================================
 
 ReactDOM.render(
-  <MultiRoundCribbageGame />,
+  <ErrorBoundary>
+    <MultiRoundCribbageGame />
+  </ErrorBoundary>,
   document.getElementById('root')
 );
 
