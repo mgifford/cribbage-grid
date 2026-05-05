@@ -603,37 +603,65 @@ function getAutoJoinId() {
 
 class Deck extends React.Component {
   render() {
-    const src = this.props.isEmpty ? "cards/blank_card.svg" : "cards/astronaut.svg";
     const label = this.props.isEmpty ? "Empty deck" : "Start next round";
+    const deckStyle = {
+      width: '50px',
+      height: '70px',
+      borderRadius: '4px',
+      border: this.props.isEmpty ? '1px dashed #ccc' : '2px solid #1565c0',
+      backgroundColor: this.props.isEmpty ? '#f5f5f5' : '#1565c0',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#fff',
+      fontSize: '22px',
+      cursor: this.props.isEmpty ? 'default' : 'pointer',
+      userSelect: 'none',
+    };
     return (
       <button
         onClick={() => this.props.clickHandler()}
         aria-label={label}
-        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: this.props.isEmpty ? 'default' : 'pointer' }}
       >
-        <img src={src} width="50px" alt="" aria-hidden="true" />
+        <div style={deckStyle} aria-hidden="true">
+          {this.props.isEmpty ? '' : '🂠'}
+        </div>
       </button>
     );
   }
 }
 
-
-function rank2svgid(r) {
-  if (r.length === 1) {
-    return r;
+/** Returns the Unicode suit symbol for a given suit name. */
+function suitSymbol(suit) {
+  switch (suit) {
+    case 'hearts':   return '♥';
+    case 'diamonds': return '♦';
+    case 'clubs':    return '♣';
+    case 'spades':   return '♠';
+    default:         return '';
   }
-  else if (r === '10') {
-    return 'T';
-  }
-  return r.charAt(0).toUpperCase();
 }
 
-function convertCardToUrl(rank, suit) {
-  const rank_id  = rank2svgid(rank);
-  return "cards/" + rank_id + suit.charAt(0).toUpperCase() + ".svg";
+/** Returns the short display label for a rank (A, 2–10, J, Q, K). */
+function rankDisplay(rank) {
+  if (!rank) return '';
+  switch (rank) {
+    case 'ace':   return 'A';
+    case 'jack':  return 'J';
+    case 'queen': return 'Q';
+    case 'king':  return 'K';
+    default:      return rank;
+  }
 }
 
+/** Returns true for red suits (hearts, diamonds). */
+function isRedSuit(suit) {
+  return suit === 'hearts' || suit === 'diamonds';
+}
 
+const CARD_RED_COLOR = '#c62828';
+const CARD_BLACK_COLOR = '#212121';
 
 function cardDescription(rank, suit, showBack) {
   if (showBack) return 'Face-down card';
@@ -646,22 +674,51 @@ function cardDescription(rank, suit, showBack) {
 }
 
 function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, selected, ...rest }) {
-  let location;
-  if (showBack) {
-    location = "cards/astronaut.svg";
-  }
-  else if (rank && suit) {
-    location = convertCardToUrl(rank, suit);
-  }
-  else {
-    location = "cards/blank_card.svg";
-  }
-
   const description = ariaLabel || cardDescription(rank, suit, showBack);
 
   const selectedBorderStyle = selected
     ? { outline: '3px solid #f57c00', outlineOffset: '2px', borderRadius: '4px' }
     : {};
+
+  const textColor = (rank && suit) ? (isRedSuit(suit) ? CARD_RED_COLOR : CARD_BLACK_COLOR) : '#bbb';
+
+  let cardInner;
+  if (showBack) {
+    cardInner = (
+      <div style={{
+        width: '50px', height: '70px', borderRadius: '4px',
+        backgroundColor: '#1565c0', border: '2px solid #0d47a1',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <span style={{ color: '#fff', fontSize: '22px' }} aria-hidden="true">🂠</span>
+      </div>
+    );
+  } else if (rank && suit) {
+    const r = rankDisplay(rank);
+    const s = suitSymbol(suit);
+    cardInner = (
+      <div style={{
+        width: '50px', height: '70px', borderRadius: '4px',
+        backgroundColor: '#fff', border: '1px solid #999',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        position: 'relative', color: textColor, fontWeight: 'bold',
+        fontFamily: 'Georgia, serif',
+        userSelect: 'none',
+      }}>
+        <span style={{ position: 'absolute', top: '3px', left: '5px', fontSize: '13px', lineHeight: 1 }}>{r}</span>
+        <span style={{ fontSize: '24px', lineHeight: 1 }} aria-hidden="true">{s}</span>
+        <span style={{ position: 'absolute', bottom: '3px', right: '5px', fontSize: '13px', lineHeight: 1, transform: 'rotate(180deg)', display: 'inline-block' }}>{r}</span>
+      </div>
+    );
+  } else {
+    cardInner = (
+      <div style={{
+        width: '50px', height: '70px', borderRadius: '4px',
+        backgroundColor: '#f5f5f5', border: '1px dashed #ccc',
+      }} aria-hidden="true" />
+    );
+  }
 
   if (clickHandler) {
     const handleKey = (e) => {
@@ -681,14 +738,14 @@ function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, sel
         onKeyDown={handleKey}
         style={{ display: 'inline-block', cursor: 'pointer', ...selectedBorderStyle }}
       >
-        <img src={location} width="50px" alt="" aria-hidden="true" />
+        {cardInner}
       </div>
     );
   }
 
   return (
-    <div {...rest} style={{ display: 'inline-block', ...selectedBorderStyle }}>
-      <img src={location} width="50px" alt={description} />
+    <div {...rest} aria-label={description} style={{ display: 'inline-block', ...selectedBorderStyle }}>
+      {cardInner}
     </div>
   );
 }
@@ -1745,6 +1802,16 @@ function scoreFlush(hand) {
   return 0;
 }
 
+/** +2 bonus when all 5 cards in a hand are the same color (all red or all black). */
+function scoreColor(hand) {
+  if (hand.length < 5) return 0;
+  const realCards = hand.filter(c => c.suit);
+  if (realCards.length < 5) return 0;
+  const allRed = realCards.every(c => isRedSuit(c.suit));
+  const allBlack = realCards.every(c => !isRedSuit(c.suit));
+  return (allRed || allBlack) ? 2 : 0;
+}
+
 
 function score15(hand) {
   const numbers = hand.map( (x) => Math.min(10, convertRankToNumber(x.rank)));
@@ -1807,6 +1874,7 @@ function scoreHand(hand) {
 
   score += score15(hand);
   score += scoreFlush(hand);
+  score += scoreColor(hand);
   score += scorePairs(hand);
   score += scoreRuns(hand);
 
@@ -2252,15 +2320,12 @@ function RunwabbleBoard({ board, selectedCells, onCellClick }) {
       if (tile) {
         const displayRank = rwEffectiveRank(tile);
         const desc = cardDescription(displayRank, tile.suit, false);
+        const tileColor = isRedSuit(tile.suit) ? CARD_RED_COLOR : CARD_BLACK_COLOR;
         cells.push(
           <td key={`c-${c}`} style={{ padding: 0 }}>
-            <div style={cellBaseStyle} aria-label={`Row ${r + 1} Col ${c + 1}: ${desc}`}>
-              <img
-                src={convertCardToUrl(displayRank, tile.suit)}
-                width={tileSize - 4}
-                alt=""
-                aria-hidden="true"
-              />
+            <div style={{ ...cellBaseStyle, color: tileColor, fontWeight: 'bold', fontFamily: 'Georgia, serif', flexDirection: 'column', position: 'relative' }} aria-label={`Row ${r + 1} Col ${c + 1}: ${desc}`}>
+              <span style={{ fontSize: '9px', lineHeight: 1 }} aria-hidden="true">{rankDisplay(displayRank)}</span>
+              <span style={{ fontSize: '14px', lineHeight: 1 }} aria-hidden="true">{suitSymbol(tile.suit)}</span>
             </div>
           </td>
         );
