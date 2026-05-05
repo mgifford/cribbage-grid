@@ -923,6 +923,81 @@ function countValidPlacements(cardLayout) {
 }
 
 /**
+ * Returns true if the cell at cellIndex is orthogonally adjacent to any occupied cell.
+ */
+function isAdjacentToOccupied(cardLayout, cellIndex) {
+  const row = Math.floor(cellIndex / GRID_SIZE);
+  const col = cellIndex % GRID_SIZE;
+  const neighbors = [
+    [row - 1, col], [row + 1, col],
+    [row, col - 1], [row, col + 1],
+  ];
+  for (const [r, c] of neighbors) {
+    if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE) {
+      if (cardLayout[r * GRID_SIZE + c].rank) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Validate that placing at newCell is consistent with the straight-line rule.
+ * turnCells: array of cell indices already placed this turn.
+ * Returns { valid: boolean, error?: string }.
+ */
+function validateTurnLine(turnCells, newCell) {
+  if (turnCells.length === 0) return { valid: true };
+
+  const newRow = Math.floor(newCell / GRID_SIZE);
+  const newCol = newCell % GRID_SIZE;
+
+  if (turnCells.length === 1) {
+    const firstRow = Math.floor(turnCells[0] / GRID_SIZE);
+    const firstCol = turnCells[0] % GRID_SIZE;
+    if (newRow !== firstRow && newCol !== firstCol) {
+      return { valid: false, error: 'All cards in a turn must be placed in the same row or column.' };
+    }
+    return { valid: true };
+  }
+
+  // 2+ cells placed: determine locked direction
+  const rows = turnCells.map(c => Math.floor(c / GRID_SIZE));
+  const cols = turnCells.map(c => c % GRID_SIZE);
+  const sameRow = rows.every(r => r === rows[0]);
+  const sameCol = cols.every(c => c === cols[0]);
+
+  if (sameRow && newRow !== rows[0]) {
+    return { valid: false, error: `Must place in row ${rows[0] + 1} to continue your line this turn.` };
+  }
+  if (sameCol && newCol !== cols[0]) {
+    return { valid: false, error: `Must place in column ${cols[0] + 1} to continue your line this turn.` };
+  }
+  return { valid: true };
+}
+
+/**
+ * Count cells valid for placement on the current turn
+ * (considering adjacency and straight-line constraints).
+ */
+function countValidTurnPlacements(cardLayout, turnCells) {
+  let count = 0;
+  for (let i = 0; i < CELLS; i++) {
+    if (cardLayout[i].rank) continue;
+    const row = Math.floor(i / GRID_SIZE);
+    const col = i % GRID_SIZE;
+    if (countCardsInRow(cardLayout, row) >= MAX_CARDS_PER_LINE) continue;
+    if (countCardsInCol(cardLayout, col) >= MAX_CARDS_PER_LINE) continue;
+    if (!isAdjacentToOccupied(cardLayout, i)) continue;
+    if (!validateTurnLine(turnCells, i).valid) continue;
+    count++;
+  }
+  return count;
+}
+
+/** Bonus points awarded when a player plays all 5 hand cards in one turn. */
+const FIVE_CARD_BONUS = 5;
+
+/**
  * Compute the sum of all row scores and all column scores from a flat cardLayout array.
  * Only lines with 2 or more cards are scored (matching CardGrid behaviour).
  */
@@ -1052,7 +1127,8 @@ class CardGrid extends React.Component {
     const col = (i % GRID_SIZE) + 1;
     const card = this.props.cardLayout[i];
     const isEmpty = !card.rank;
-    const isPlaceable = this.props.selectedHandCard && isEmpty;
+    const inValidSet = !this.props.validCells || this.props.validCells.has(i);
+    const isPlaceable = this.props.selectedHandCard && isEmpty && inValidSet;
     let posLabel = `Row ${row}, Column ${col}: ${cardDescription(card.rank, card.suit, false)}`;
     if (isPlaceable) posLabel += ' – click to place selected card here';
     return (
@@ -1228,6 +1304,9 @@ class CribbageGame extends React.Component {
         p1Name: props.initialGameState.p1Name || 'Host',
         p2Name: props.initialGameState.p2Name || 'Guest',
         cardsPlacedThisTurn: 0,
+        turnCells: [],
+        p1Bonus: 0,
+        p2Bonus: 0,
         placementError: null,
         lastTurnInfo: null,
         turnStartScores: computeGridScores(initLayout),
@@ -1251,6 +1330,8 @@ class CribbageGame extends React.Component {
         currentPlayerIndex: 0,
         selectedHandIndex: null,
         cardsPlacedThisTurn: 0,
+        turnCells: [],
+        playerBonuses: new Array(numPlayers).fill(0),
         placementError: null,
         lastTurnInfo: null,
         turnStartScores: zones.map(z => computePlayerScore(cl, z)),
@@ -1291,6 +1372,9 @@ class CribbageGame extends React.Component {
           rowTurn: newState.rowTurn,
           selectedHandIndex: null,
           cardsPlacedThisTurn: newState.cardsPlacedThisTurn || 0,
+          turnCells: newState.turnCells || [],
+          p1Bonus: newState.p1Bonus || 0,
+          p2Bonus: newState.p2Bonus || 0,
           placementError: null,
           // Update names when they arrive (joiner sends back p2Name on first sync)
           p1Name: newState.p1Name || this.state.p1Name,
@@ -1328,7 +1412,7 @@ class CribbageGame extends React.Component {
     const idx = state.currentPlayerIndex;
     const player = players[idx];
     const hand = state.hands && state.hands[idx];
-    const hasValidCells = countValidPlacements(state.cardLayout) > 0;
+    const hasValidCells = countValidTurnPlacements(state.cardLayout, []) > 0;
     if (player && player.type === 'cpu' && hasValidCells && hand && hand.length > 0) {
       setTimeout(() => this.cpuMoveHandler(), 1200);
     }
@@ -1355,6 +1439,9 @@ class CribbageGame extends React.Component {
         rowTurn: newRowTurn,
         selectedHandIndex: null,
         cardsPlacedThisTurn: 0,
+        turnCells: [],
+        p1Bonus: 0,
+        p2Bonus: 0,
         placementError: null,
         lastTurnInfo: null,
         turnStartScores: computeGridScores(cl),
@@ -1376,6 +1463,8 @@ class CribbageGame extends React.Component {
         currentPlayerIndex: nextStart,
         selectedHandIndex: null,
         cardsPlacedThisTurn: 0,
+        turnCells: [],
+        playerBonuses: new Array(numPlayers).fill(0),
         placementError: null,
         lastTurnInfo: null,
         turnStartScores: zones.map(z => computePlayerScore(cl, z)),
@@ -1417,24 +1506,40 @@ class CribbageGame extends React.Component {
         return;
       }
 
+      // Adjacency check
+      if (!isAdjacentToOccupied(cardLayout, i)) {
+        this.setState({ placementError: 'Cards must connect – place adjacent to an existing card.' });
+        return;
+      }
+
+      // Straight-line check
+      const lineCheck = validateTurnLine(this.state.turnCells, i);
+      if (!lineCheck.valid) {
+        this.setState({ placementError: lineCheck.error });
+        return;
+      }
+
+      // Remove the placed card from hand (no deck draw until end of turn)
       const newHand = hand.filter((_, idx) => idx !== selectedHandIndex);
-      let newDeck = this.state.deck.slice();
-      if (newDeck.length > 0) { newHand.push(newDeck[0]); newDeck = newDeck.slice(1); }
 
       const newLayout = cardLayout.slice();
       newLayout[i] = cardToPlace;
+      const newTurnCells = [...this.state.turnCells, i];
 
       const newState = {
-        deck: newDeck,
+        deck: this.state.deck,
         p1Hand: rowTurn ? newHand : this.state.p1Hand,
         p2Hand: rowTurn ? this.state.p2Hand : newHand,
         cardLayout: newLayout,
         rowTurn,
         selectedHandIndex: null,
         cardsPlacedThisTurn: this.state.cardsPlacedThisTurn + 1,
+        turnCells: newTurnCells,
         placementError: null,
         lastTurnInfo: this.state.lastTurnInfo,
         turnStartScores: this.state.turnStartScores,
+        p1Bonus: this.state.p1Bonus,
+        p2Bonus: this.state.p2Bonus,
       };
       this.props.peerSync.state = newState;
       this.props.peerSync.sync();
@@ -1465,21 +1570,34 @@ class CribbageGame extends React.Component {
       return;
     }
 
+    // Adjacency check
+    if (!isAdjacentToOccupied(cardLayout, i)) {
+      this.setState({ placementError: 'Cards must connect – place adjacent to an existing card.' });
+      return;
+    }
+
+    // Straight-line check
+    const lineCheck = validateTurnLine(this.state.turnCells, i);
+    if (!lineCheck.valid) {
+      this.setState({ placementError: lineCheck.error });
+      return;
+    }
+
+    // Remove the placed card from hand (no deck draw until end of turn)
     const newHand = hand.filter((_, idx) => idx !== selectedHandIndex);
-    let newDeck = this.state.deck.slice();
-    if (newDeck.length > 0) { newHand.push(newDeck[0]); newDeck = newDeck.slice(1); }
 
     const newLayout = cardLayout.slice();
     newLayout[i] = cardToPlace;
+    const newTurnCells = [...this.state.turnCells, i];
 
     const newHands = hands.map((h, idx) => idx === currentPlayerIndex ? newHand : h);
 
     this.setState({
-      deck: newDeck,
       hands: newHands,
       cardLayout: newLayout,
       selectedHandIndex: null,
       cardsPlacedThisTurn: this.state.cardsPlacedThisTurn + 1,
+      turnCells: newTurnCells,
       placementError: null,
       p1Hand: newHands[0],
       p2Hand: newHands[1] || [],
@@ -1494,20 +1612,44 @@ class CribbageGame extends React.Component {
       const { deck, p1Hand, p2Hand, cardLayout, rowTurn, cardsPlacedThisTurn, turnStartScores } = this.state;
       const newRowTurn = !rowTurn;
       const currentScores = computeGridScores(cardLayout);
+
+      // Draw replacement cards from deck for the current player
+      let newDeck = deck.slice();
+      const currentHand = rowTurn ? p1Hand : p2Hand;
+      const refilled = currentHand.slice();
+      while (refilled.length < 5 && newDeck.length > 0) {
+        refilled.push(newDeck[0]);
+        newDeck = newDeck.slice(1);
+      }
+      const newP1Hand = rowTurn ? refilled : p1Hand;
+      const newP2Hand = rowTurn ? p2Hand : refilled;
+
+      // 5-card bonus
+      const earnedBonus = cardsPlacedThisTurn === 5 ? FIVE_CARD_BONUS : 0;
+      const newP1Bonus = (this.state.p1Bonus || 0) + (rowTurn ? earnedBonus : 0);
+      const newP2Bonus = (this.state.p2Bonus || 0) + (!rowTurn ? earnedBonus : 0);
+
       const lastTurnInfo = {
         wasRowTurn: rowTurn,
         rowDelta: currentScores.rowTotal - turnStartScores.rowTotal,
         colDelta: currentScores.colTotal - turnStartScores.colTotal,
         cardsPlaced: cardsPlacedThisTurn,
+        bonusPoints: earnedBonus,
       };
       const newState = {
-        deck, p1Hand, p2Hand, cardLayout,
+        deck: newDeck,
+        p1Hand: newP1Hand,
+        p2Hand: newP2Hand,
+        cardLayout,
         rowTurn: newRowTurn,
         selectedHandIndex: null,
         cardsPlacedThisTurn: 0,
+        turnCells: [],
         placementError: null,
         lastTurnInfo,
         turnStartScores: currentScores,
+        p1Bonus: newP1Bonus,
+        p2Bonus: newP2Bonus,
       };
       this.props.peerSync.state = newState;
       this.props.peerSync.sync();
@@ -1516,14 +1658,32 @@ class CribbageGame extends React.Component {
     }
 
     // Local N-player path
-    const { hands, cardLayout, currentPlayerIndex, cardsPlacedThisTurn, turnStartScores } = this.state;
+    const { hands, cardLayout, currentPlayerIndex, cardsPlacedThisTurn, turnStartScores, playerBonuses } = this.state;
     const players = this.props.players || this._defaultPlayers();
     const numPlayers = players.length;
     const newPlayerIndex = (currentPlayerIndex + 1) % numPlayers;
 
+    // Draw replacement cards from deck
+    let newDeck = this.state.deck.slice();
+    const newHands = hands.map((h, idx) => {
+      if (idx !== currentPlayerIndex) return h;
+      const refilled = h.slice();
+      while (refilled.length < 5 && newDeck.length > 0) {
+        refilled.push(newDeck[0]);
+        newDeck = newDeck.slice(1);
+      }
+      return refilled;
+    });
+
     const zones = this._getZones(numPlayers, players);
     const newScores = zones.map(z => computePlayerScore(cardLayout, z));
     const scoreDelta = newScores[currentPlayerIndex] - turnStartScores[currentPlayerIndex];
+
+    // 5-card bonus
+    const earnedBonus = cardsPlacedThisTurn === 5 ? FIVE_CARD_BONUS : 0;
+    const newPlayerBonuses = (playerBonuses || []).slice();
+    while (newPlayerBonuses.length < numPlayers) newPlayerBonuses.push(0);
+    if (earnedBonus > 0) newPlayerBonuses[currentPlayerIndex] += earnedBonus;
 
     const lastTurnInfo = {
       playerIndex: currentPlayerIndex,
@@ -1531,20 +1691,23 @@ class CribbageGame extends React.Component {
       playerRole: players[currentPlayerIndex].role,
       scoreDelta,
       cardsPlaced: cardsPlacedThisTurn,
+      bonusPoints: earnedBonus,
     };
 
     const newState = {
-      deck: this.state.deck,
-      hands,
+      deck: newDeck,
+      hands: newHands,
       cardLayout,
       currentPlayerIndex: newPlayerIndex,
       selectedHandIndex: null,
       cardsPlacedThisTurn: 0,
+      turnCells: [],
+      playerBonuses: newPlayerBonuses,
       placementError: null,
       lastTurnInfo,
       turnStartScores: newScores,
-      p1Hand: hands[0],
-      p2Hand: hands[1] || [],
+      p1Hand: newHands[0],
+      p2Hand: newHands[1] || [],
       rowTurn: newPlayerIndex === 0,
     };
 
@@ -1554,7 +1717,7 @@ class CribbageGame extends React.Component {
   cpuMoveHandler() {
     if (this.props.peerSync) return; // CPU not used in online multiplayer
 
-    const { currentPlayerIndex, cardLayout, cardsPlacedThisTurn, hands } = this.state;
+    const { currentPlayerIndex, cardLayout, cardsPlacedThisTurn, hands, turnCells } = this.state;
     const players = this.props.players || this._defaultPlayers();
     const player = players[currentPlayerIndex];
     if (!player || player.type !== 'cpu') return;
@@ -1563,42 +1726,50 @@ class CribbageGame extends React.Component {
     const cpuLevel = player.cpuLevel || 5;
     const numPlayers = players.length;
 
-    const validCells = countValidPlacements(cardLayout);
-    if (cardsPlacedThisTurn >= MAX_CARDS_PER_LINE || validCells === 0) {
+    // Check if game is over (no placeable cells at all)
+    if (countValidPlacements(cardLayout) === 0) {
+      this.handleEndTurn();
+      return;
+    }
+
+    // Check turn limits and valid turn placements
+    const validTurnCells = countValidTurnPlacements(cardLayout, turnCells);
+    if (cardsPlacedThisTurn >= MAX_CARDS_PER_LINE || validTurnCells === 0) {
       this.handleEndTurn();
       return;
     }
 
     // Use zone-aware CPU for all player counts
     const zone = player.zone || this._getZones(numPlayers, players)[currentPlayerIndex];
-    const move = getCpuHandMoveForZone(cardLayout, hand, cpuLevel, zone);
+    const move = getCpuHandMoveForZone(cardLayout, hand, cpuLevel, zone, turnCells);
     if (!move) {
       this.handleEndTurn();
       return;
     }
 
     const { handIndex, gridIndex } = move;
+    // Remove placed card from hand (no draw from deck until end of turn)
     const newHand = hand.filter((_, idx) => idx !== handIndex);
-    let newDeck = this.state.deck.slice();
-    if (newDeck.length > 0) { newHand.push(newDeck[0]); newDeck = newDeck.slice(1); }
 
     const newLayout = cardLayout.slice();
     newLayout[gridIndex] = hand[handIndex];
     const newCardsPlaced = cardsPlacedThisTurn + 1;
-    const nextValidCells = countValidPlacements(newLayout);
+    const newTurnCells = [...turnCells, gridIndex];
+    const nextValidTurnCells = countValidTurnPlacements(newLayout, newTurnCells);
 
     const newHands = hands.map((h, idx) => idx === currentPlayerIndex ? newHand : h);
 
     const newState = {
-      deck: newDeck,
       hands: newHands,
       cardLayout: newLayout,
       currentPlayerIndex,
       selectedHandIndex: null,
       cardsPlacedThisTurn: newCardsPlaced,
+      turnCells: newTurnCells,
       placementError: null,
       lastTurnInfo: this.state.lastTurnInfo,
       turnStartScores: this.state.turnStartScores,
+      playerBonuses: this.state.playerBonuses,
       p1Hand: newHands[0],
       p2Hand: newHands[1] || [],
       rowTurn: currentPlayerIndex === 0,
@@ -1606,7 +1777,7 @@ class CribbageGame extends React.Component {
 
     this.setState(newState, () => {
       const stillHasCards = newHand.length > 0;
-      if (newCardsPlaced < MAX_CARDS_PER_LINE && stillHasCards && nextValidCells > 0) {
+      if (newCardsPlaced < MAX_CARDS_PER_LINE && stillHasCards && nextValidTurnCells > 0) {
         setTimeout(() => this.cpuMoveHandler(), 800);
       } else {
         setTimeout(() => this.handleEndTurn(), 600);
@@ -1625,14 +1796,14 @@ class CribbageGame extends React.Component {
 
   _renderOnlineMultiplayer() {
     const { cardLayout, p1Hand, p2Hand, selectedHandIndex, deck,
-            cardsPlacedThisTurn, placementError, lastTurnInfo,
+            cardsPlacedThisTurn, placementError, lastTurnInfo, turnCells,
             p1Name: stateP1Name, p2Name: stateP2Name } = this.state;
     const { isHost } = this.props;
 
     const resolvedP1Name = stateP1Name || 'Host';
     const resolvedP2Name = stateP2Name || 'Guest';
-    const validCellsLeft = countValidPlacements(cardLayout);
-    const roundOver = validCellsLeft === 0;
+    const roundOver = countValidPlacements(cardLayout) === 0 ||
+                      countValidTurnPlacements(cardLayout, []) === 0;
     const myTurn = this.isMyTurn();
     const myRole = isHost ? 'rows' : 'cols';
     const myName = isHost ? resolvedP1Name : resolvedP2Name;
@@ -1651,9 +1822,43 @@ class CribbageGame extends React.Component {
       ? (isHost ? p1Hand[selectedHandIndex] : p2Hand[selectedHandIndex])
       : null;
 
+    // Compute valid placement cells (considering adjacency + turn line)
+    const validCellSet = new Set();
+    if (!roundOver && isLocalHumanTurn) {
+      for (let idx = 0; idx < CELLS; idx++) {
+        if (cardLayout[idx].rank) continue;
+        const r = Math.floor(idx / GRID_SIZE);
+        const c = idx % GRID_SIZE;
+        if (countCardsInRow(cardLayout, r) >= MAX_CARDS_PER_LINE) continue;
+        if (countCardsInCol(cardLayout, c) >= MAX_CARDS_PER_LINE) continue;
+        if (!isAdjacentToOccupied(cardLayout, idx)) continue;
+        if (!validateTurnLine(turnCells, idx).valid) continue;
+        validCellSet.add(idx);
+      }
+    }
+
     const resetClickHandler = (r, c) => {
-      if (isHost) { this.resetGame(); this.props.resetCallback([r, c]); }
+      if (isHost) {
+        const p1Bonus = this.state.p1Bonus || 0;
+        const p2Bonus = this.state.p2Bonus || 0;
+        this.resetGame();
+        this.props.resetCallback([r + p1Bonus, c + p2Bonus]);
+      }
     };
+
+    // Turn line indicator
+    let turnLineText = null;
+    if (!roundOver && myTurn && turnCells.length > 0) {
+      const rows = turnCells.map(c => Math.floor(c / GRID_SIZE));
+      const cols = turnCells.map(c => c % GRID_SIZE);
+      if (turnCells.length === 1) {
+        turnLineText = `First card placed – next card must share row ${rows[0] + 1} or column ${cols[0] + 1}`;
+      } else if (rows.every(r => r === rows[0])) {
+        turnLineText = `Playing in row ${rows[0] + 1} this turn`;
+      } else if (cols.every(c => c === cols[0])) {
+        turnLineText = `Playing in column ${cols[0] + 1} this turn`;
+      }
+    }
 
     // 2-player zones for color coding
     const zones = assignScoringZones(2);
@@ -1665,6 +1870,11 @@ class CribbageGame extends React.Component {
         <p style={{ color: '#555', fontSize: '14px', marginTop: 0 }}>
           You are: <strong>{isHost ? `${resolvedP1Name} (rows)` : `${resolvedP2Name} (cols)`}</strong>
         </p>
+        {turnLineText && (
+          <p style={{ fontSize: '13px', color: '#1565c0', margin: '2px 0 6px' }}>
+            🎯 {turnLineText}
+          </p>
+        )}
         <br/>
         <CardGrid
           nextCard={roundOver ? null : (isHost ? (p1Hand[0] || null) : (p2Hand[0] || null))}
@@ -1672,6 +1882,7 @@ class CribbageGame extends React.Component {
           clickHandler={(i) => this.handleGridClick(i)}
           resetCallback={resetClickHandler}
           selectedHandCard={selectedCardForGrid}
+          validCells={validCellSet}
           zones={zones}
         />
         <br />
@@ -1684,6 +1895,9 @@ class CribbageGame extends React.Component {
             placed {lastTurnInfo.cardsPlaced} card{lastTurnInfo.cardsPlaced !== 1 ? 's' : ''}
             {' · '}Row pts: <strong>{lastTurnInfo.rowDelta > 0 ? `+${lastTurnInfo.rowDelta}` : lastTurnInfo.rowDelta}</strong>
             {' · '}Col pts: <strong>{lastTurnInfo.colDelta > 0 ? `+${lastTurnInfo.colDelta}` : lastTurnInfo.colDelta}</strong>
+            {lastTurnInfo.bonusPoints > 0 && (
+              <>{' · '}<strong style={{ color: '#e65100' }}>🎉 Full Hand Bonus: +{lastTurnInfo.bonusPoints}</strong></>
+            )}
           </div>
         )}
         <div>
@@ -1717,13 +1931,14 @@ class CribbageGame extends React.Component {
 
   _renderLocalGame(players) {
     const { cardLayout, currentPlayerIndex, hands, selectedHandIndex, deck,
-            cardsPlacedThisTurn, placementError, lastTurnInfo } = this.state;
+            cardsPlacedThisTurn, placementError, lastTurnInfo, turnCells,
+            playerBonuses } = this.state;
     const numPlayers = players.length;
     const currentPlayer = players[currentPlayerIndex];
     const zones = this._getZones(numPlayers, players);
 
-    const validCellsLeft = countValidPlacements(cardLayout);
-    const roundOver = validCellsLeft === 0;
+    const roundOver = countValidPlacements(cardLayout) === 0 ||
+                      countValidTurnPlacements(cardLayout, []) === 0;
 
     const isHumanTurn = currentPlayer && currentPlayer.type === 'human';
 
@@ -1746,9 +1961,40 @@ class CribbageGame extends React.Component {
 
     const playerColor = PLAYER_COLORS[currentPlayerIndex % PLAYER_COLORS.length];
 
+    // Compute valid placement cells (adjacency + turn line)
+    const validCellSet = new Set();
+    if (!roundOver && isHumanTurn) {
+      for (let idx = 0; idx < CELLS; idx++) {
+        if (cardLayout[idx].rank) continue;
+        const r = Math.floor(idx / GRID_SIZE);
+        const c = idx % GRID_SIZE;
+        if (countCardsInRow(cardLayout, r) >= MAX_CARDS_PER_LINE) continue;
+        if (countCardsInCol(cardLayout, c) >= MAX_CARDS_PER_LINE) continue;
+        if (!isAdjacentToOccupied(cardLayout, idx)) continue;
+        if (!validateTurnLine(turnCells, idx).valid) continue;
+        validCellSet.add(idx);
+      }
+    }
+
+    // Turn line indicator text
+    let turnLineText = null;
+    if (!roundOver && isHumanTurn && turnCells.length > 0) {
+      const rows = turnCells.map(c => Math.floor(c / GRID_SIZE));
+      const cols = turnCells.map(c => c % GRID_SIZE);
+      if (turnCells.length === 1) {
+        turnLineText = `First card placed – next must share row ${rows[0] + 1} or column ${cols[0] + 1}`;
+      } else if (rows.every(r => r === rows[0])) {
+        turnLineText = `Playing in row ${rows[0] + 1} this turn`;
+      } else if (cols.every(c => c === cols[0])) {
+        turnLineText = `Playing in column ${cols[0] + 1} this turn`;
+      }
+    }
+
     const resetClickHandler = (r, c) => {
-      // Compute per-player scores from the final grid state
-      const finalScores = zones.map(z => computePlayerScore(cardLayout, z));
+      // Compute per-player scores (grid score + accumulated bonuses)
+      const finalScores = zones.map((z, i) =>
+        computePlayerScore(cardLayout, z) + ((playerBonuses || [])[i] || 0)
+      );
       this.resetGame();
       this.props.resetCallback(finalScores);
     };
@@ -1757,6 +2003,11 @@ class CribbageGame extends React.Component {
       <div>
         <div aria-live="polite" aria-atomic="true" className="sr-only">{turnText}</div>
         <h3 style={{ color: playerColor }}>{turnText}</h3>
+        {turnLineText && (
+          <p style={{ fontSize: '13px', color: '#1565c0', margin: '2px 0 6px' }}>
+            🎯 {turnLineText}
+          </p>
+        )}
         <br/>
         <CardGrid
           nextCard={roundOver ? null : nextCardForGrid}
@@ -1764,6 +2015,7 @@ class CribbageGame extends React.Component {
           clickHandler={(i) => this.handleGridClick(i)}
           resetCallback={resetClickHandler}
           selectedHandCard={selectedCardForGrid}
+          validCells={validCellSet}
           zones={zones}
         />
         <br />
@@ -1775,6 +2027,9 @@ class CribbageGame extends React.Component {
             placed {lastTurnInfo.cardsPlaced} card{lastTurnInfo.cardsPlaced !== 1 ? 's' : ''}
             {lastTurnInfo.scoreDelta !== 0 && (
               <>{' · '}Score: <strong>{lastTurnInfo.scoreDelta > 0 ? `+${lastTurnInfo.scoreDelta}` : lastTurnInfo.scoreDelta}</strong></>
+            )}
+            {lastTurnInfo.bonusPoints > 0 && (
+              <>{' · '}<strong style={{ color: '#e65100' }}>🎉 Full Hand Bonus: +{lastTurnInfo.bonusPoints}</strong></>
             )}
           </div>
         )}
@@ -2381,8 +2636,9 @@ function pickIndex(values) {
  * Like getNextMoveRatings but evaluates moves purely within the given scoring zone.
  * The CPU tries to maximise its own zone's score improvement.
  * @param {object} zone  { rows: number[], cols: number[] }
+ * @param {number[]} turnCells  Cells already placed this turn (for straight-line constraint)
  */
-function getNextMoveRatingsForZone(cardLayout, nextCard, zone) {
+function getNextMoveRatingsForZone(cardLayout, nextCard, zone, turnCells = []) {
   const array2d = convertLayoutToGrid(cardLayout);
   const openIndices = [];
   const netRatings = [];
@@ -2403,6 +2659,14 @@ function getNextMoveRatingsForZone(cardLayout, nextCard, zone) {
       }
       if (colCount >= MAX_CARDS_PER_LINE) continue;
 
+      const cellIndex = row * GRID_SIZE + col;
+
+      // Adjacency constraint: must be adjacent to an existing card
+      if (!isAdjacentToOccupied(cardLayout, cellIndex)) continue;
+
+      // Straight-line constraint: must be consistent with the current turn line
+      if (!validateTurnLine(turnCells, cellIndex).valid) continue;
+
       const ownsRow = zone.rows.includes(row);
       const ownsCol = zone.cols.includes(col);
 
@@ -2418,7 +2682,7 @@ function getNextMoveRatingsForZone(cardLayout, nextCard, zone) {
 
       array2d[row][col] = { rank: null, suit: null };
 
-      openIndices.push(row * GRID_SIZE + col);
+      openIndices.push(cellIndex);
       netRatings.push(newScore - baselineScore);
     }
   }
@@ -2429,14 +2693,15 @@ function getNextMoveRatingsForZone(cardLayout, nextCard, zone) {
  * Zone-aware version of getCpuHandMove.
  * The CPU maximises score gains within its own assigned rows / cols.
  * Returns {handIndex, gridIndex} or null if no move is available.
+ * @param {number[]} turnCells  Cells already placed this turn (for straight-line constraint)
  */
-function getCpuHandMoveForZone(cardLayout, hand, cpuLevel, zone) {
+function getCpuHandMoveForZone(cardLayout, hand, cpuLevel, zone, turnCells = []) {
   if (!hand || hand.length === 0) return null;
 
   let allChoices = [];
   hand.forEach((card, hIdx) => {
     if (!card || !card.rank) return;
-    const [openIndices, netRatings] = getNextMoveRatingsForZone(cardLayout, card, zone);
+    const [openIndices, netRatings] = getNextMoveRatingsForZone(cardLayout, card, zone, turnCells);
     openIndices.forEach((gridIdx, i) => {
       allChoices.push({ handIndex: hIdx, gridIndex: gridIdx, rating: netRatings[i] });
     });
