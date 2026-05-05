@@ -31,6 +31,14 @@
   --input-text: #212121;
   --placeable-outline: #1976d2;
   --score-header-bg: transparent;
+  --error-text: #c62828;
+  --info-text: #1565c0;
+  --player-color-0: #1565c0;
+  --player-color-1: #b71c1c;
+  --player-color-2: #1b5e20;
+  --player-color-3: #bf360c;
+  --btn-success-bg: #1b5e20;
+  --btn-danger-bg: #b71c1c;
 }
 
 /* ====================================================
@@ -67,6 +75,14 @@
     --input-text: #e0e0e0;
     --placeable-outline: #42a5f5;
     --score-header-bg: transparent;
+    --error-text: #ff5252;
+    --info-text: #64b5f6;
+    --player-color-0: #64b5f6;
+    --player-color-1: #ef9a9a;
+    --player-color-2: #a5d6a7;
+    --player-color-3: #ffb74d;
+    --btn-success-bg: #1b5e20;
+    --btn-danger-bg: #c62828;
   }
 }
 

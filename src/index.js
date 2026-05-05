@@ -183,7 +183,7 @@ class ErrorBoundary extends React.Component {
           {info && (
             <details style={{ marginTop: '12px' }}>
               <summary>Component stack</summary>
-              <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', color: '#333' }}>
+              <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', color: 'var(--page-text)' }}>
                 {info.componentStack}
               </pre>
             </details>
@@ -393,7 +393,7 @@ function GameSetupScreen({ onStart }) {
             </label>
           </div>
           {gameMode === 'runwabble' && (
-            <p style={{ fontSize: '12px', color: '#555', margin: '4px 0 0' }}>
+            <p style={{ fontSize: '12px', color: 'var(--score-label-color)', margin: '4px 0 0' }}>
               14×14 tile grid. Place 1-5 tiles per turn in a straight line, interlocking with existing tiles. Score 15s, runs, sets & color flush bonuses.
             </p>
           )}
@@ -421,7 +421,7 @@ function GameSetupScreen({ onStart }) {
         {Array.from({ length: gameMode === 'runwabble' ? 2 : numPlayers }, (_, i) => renderPlayerSection(i))}
 
         {!canStart && (
-          <p role="alert" style={{ color: '#c62828', fontSize: '13px', margin: '4px 0 8px' }}>
+          <p role="alert" style={{ color: 'var(--error-text)', fontSize: '13px', margin: '4px 0 8px' }}>
             At least one player must be Human.
           </p>
         )}
@@ -595,9 +595,10 @@ class MultiplayerLobby extends React.Component {
                       fontSize: '22px',
                       fontWeight: 'bold',
                       letterSpacing: '2px',
-                      backgroundColor: '#f0f0f0',
+                      backgroundColor: 'var(--card-empty-bg)',
                       padding: '10px',
                       borderRadius: '4px',
+                      color: 'var(--page-text)',
                     }}
                   >
                     {roomId}
@@ -606,7 +607,7 @@ class MultiplayerLobby extends React.Component {
                   <div style={{ margin: '16px auto', display: 'inline-block' }}>
                     <QRCodeSVG value={joinUrl} size={200} aria-label="QR code to join game" />
                   </div>
-                  <p style={{ fontSize: '13px', color: '#555', marginTop: '4px', wordBreak: 'break-all' }}>
+                  <p style={{ fontSize: '13px', color: 'var(--score-label-color)', marginTop: '4px', wordBreak: 'break-all' }}>
                     {joinUrl}
                   </p>
                   <div>
@@ -618,7 +619,7 @@ class MultiplayerLobby extends React.Component {
               ) : (
                 <p>Generating Room ID…</p>
               )}
-              <p style={{ color: '#555' }}>Waiting for opponent to connect…</p>
+              <p style={{ color: 'var(--score-label-color)' }}>Waiting for opponent to connect…</p>
               <button style={cancelBtnStyle} onClick={() => this.handleCancel()}>
                 Cancel
               </button>
@@ -652,7 +653,7 @@ class MultiplayerLobby extends React.Component {
               <button style={cancelBtnStyle} onClick={() => this.handleCancel()}>
                 Cancel
               </button>
-              {errorMsg && <p style={{ color: 'red' }}>{errorMsg}</p>}
+              {errorMsg && <p style={{ color: 'var(--error-text)' }}>{errorMsg}</p>}
             </>
           )}
         </div>
@@ -790,13 +791,12 @@ function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, sel
           fontSize: `${SUIT_FONT_SIZE}px`, lineHeight: 1,
           opacity: 0.9,
         }} aria-hidden="true">{s}</span>
-        {/* Rank badge at top-left */}
+        {/* Rank badge at top-left – decorative; card identity is in the outer aria-label */}
         <span style={{
           position: 'absolute', top: '3px', left: '5px',
           fontSize: `${RANK_FONT_SIZE}px`, lineHeight: 1,
           fontWeight: '900', color: suitColor,
-          textShadow: '0 0 4px rgba(255,255,255,0.9), 0 0 2px rgba(255,255,255,0.7)',
-        }}>{r}</span>
+        }} aria-hidden="true">{r}</span>
       </div>
     );
   } else {
@@ -833,7 +833,7 @@ function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, sel
   }
 
   return (
-    <div {...rest} aria-label={description} style={{ display: 'inline-block', ...selectedBorderStyle }}>
+    <div {...rest} role="img" aria-label={description} style={{ display: 'inline-block', ...selectedBorderStyle }}>
       {cardInner}
     </div>
   );
@@ -876,7 +876,7 @@ function HandDisplay({ hand, selectedIndex, onCardClick, label, faceDown, isActi
     <div style={containerStyle}>
       <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: 'var(--hand-label-color)' }}>
         {label}
-        {isActive && <span style={{ color: 'var(--hand-active-border)', marginLeft: '8px' }}>← click a card to select it</span>}
+        {isActive && <span style={{ color: 'var(--info-text)', marginLeft: '8px' }}>← click a card to select it</span>}
       </div>
       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
         {hand.map((card, i) => {
@@ -1096,7 +1096,12 @@ function computeGridScores(cardLayout) {
 // =========================================================
 
 /** Player colour palette used throughout the UI. */
-const PLAYER_COLORS = ['#1565c0', '#b71c1c', '#1b5e20', '#e65100'];
+const PLAYER_COLORS = [
+  'var(--player-color-0)',
+  'var(--player-color-1)',
+  'var(--player-color-2)',
+  'var(--player-color-3)',
+];
 
 /**
  * Role label for a given player slot given the total player count.
@@ -1990,7 +1995,7 @@ class CribbageGame extends React.Component {
           You are: <strong>{isHost ? `${resolvedP1Name} (rows)` : `${resolvedP2Name} (cols)`}</strong>
         </p>
         {turnLineText && (
-          <p style={{ fontSize: '13px', color: '#1565c0', margin: '2px 0 6px' }}>
+          <p style={{ fontSize: '13px', color: 'var(--info-text)', margin: '2px 0 6px' }}>
             🎯 {turnLineText}
           </p>
         )}
@@ -2038,10 +2043,10 @@ class CribbageGame extends React.Component {
             isActive={false}
           />
         </div>
-        <p style={{ fontSize: '12px', color: '#888' }}>Cards remaining in deck: {deck.length}</p>
+        <p style={{ fontSize: '12px', color: 'var(--score-label-color)' }}>Cards remaining in deck: {deck.length}</p>
         {!roundOver && isLocalHumanTurn && this._renderEndTurnButton(cardsPlacedThisTurn)}
         {placementError && (
-          <p role="alert" style={{ color: '#c62828', fontSize: '14px', margin: '6px 0' }}>
+          <p role="alert" style={{ color: 'var(--error-text)', fontSize: '14px', margin: '6px 0' }}>
             ⚠ {placementError}
           </p>
         )}
@@ -2125,7 +2130,7 @@ class CribbageGame extends React.Component {
         <div aria-live="polite" aria-atomic="true" className="sr-only">{turnText}</div>
         <h3 style={{ color: playerColor }}>{turnText}</h3>
         {turnLineText && (
-          <p style={{ fontSize: '13px', color: '#1565c0', margin: '2px 0 6px' }}>
+          <p style={{ fontSize: '13px', color: 'var(--info-text)', margin: '2px 0 6px' }}>
             🎯 {turnLineText}
           </p>
         )}
@@ -2177,7 +2182,7 @@ class CribbageGame extends React.Component {
         <p style={{ fontSize: '12px', color: 'var(--score-label-color)' }}>Cards remaining in deck: {deck.length}</p>
         {!roundOver && isHumanTurn && this._renderEndTurnButton(cardsPlacedThisTurn)}
         {placementError && (
-          <p role="alert" style={{ color: '#c62828', fontSize: '14px', margin: '6px 0' }}>
+          <p role="alert" style={{ color: 'var(--error-text)', fontSize: '14px', margin: '6px 0' }}>
             ⚠ {placementError}
           </p>
         )}
@@ -2194,13 +2199,13 @@ class CribbageGame extends React.Component {
           style={{
             padding: '10px 28px', fontSize: '16px', cursor: 'pointer',
             borderRadius: '6px', border: 'none',
-            backgroundColor: '#388e3c', color: '#fff', fontWeight: 'bold',
+            backgroundColor: 'var(--btn-success-bg)', color: '#fff', fontWeight: 'bold',
           }}
         >
           End Turn {cardsPlacedThisTurn > 0 ? `(${cardsPlacedThisTurn} card${cardsPlacedThisTurn !== 1 ? 's' : ''} placed)` : ''}
         </button>
         {cardsPlacedThisTurn === 0 && (
-          <span style={{ marginLeft: '10px', fontSize: '13px', color: '#777' }}>
+          <span style={{ marginLeft: '10px', fontSize: '13px', color: 'var(--score-label-color)' }}>
             Place at least one card before ending your turn.
           </span>
         )}
@@ -2411,7 +2416,7 @@ class MultiRoundCribbageGame extends React.Component {
         <header>
           <h1>{isRunwabble ? 'Runwabble' : 'Cribbage Grid'}</h1>
           {gameTypeLabel && (
-            <p style={{ margin: '0 0 8px', color: '#555', fontSize: '14px' }}>{gameTypeLabel}</p>
+            <p style={{ margin: '0 0 8px', color: 'var(--score-label-color)', fontSize: '14px' }}>{gameTypeLabel}</p>
           )}
         </header>
         <main id="main-content">
@@ -3094,7 +3099,7 @@ function RunwabbleBoard({ board, selectedCells, onCellClick }) {
       <th
         key={`h-${c}`}
         scope="col"
-        style={{ fontSize: '10px', textAlign: 'center', padding: '1px', color: '#888', width: tileSize }}
+        style={{ fontSize: '10px', textAlign: 'center', padding: '1px', color: 'var(--score-label-color)', width: tileSize }}
       >
         {c + 1}
       </th>
@@ -3107,7 +3112,7 @@ function RunwabbleBoard({ board, selectedCells, onCellClick }) {
       <th
         key="rh"
         scope="row"
-        style={{ fontSize: '10px', padding: '0 2px', color: '#888', textAlign: 'right', width: 22 }}
+        style={{ fontSize: '10px', padding: '0 2px', color: 'var(--score-label-color)', textAlign: 'right', width: 22 }}
       >
         {r + 1}
       </th>,
@@ -3120,13 +3125,13 @@ function RunwabbleBoard({ board, selectedCells, onCellClick }) {
       const cellBaseStyle = {
         width: tileSize,
         height: tileSize + 8,
-        border: '1px solid #ccc',
+        border: '1px solid var(--card-empty-border)',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
         boxSizing: 'border-box',
-        backgroundColor: isSelected ? '#fff3e0' : '#fafafa',
-        outline: isSelected ? '2px solid #f57c00' : 'none',
+        backgroundColor: isSelected ? 'var(--hand-active-bg)' : 'var(--card-empty-bg)',
+        outline: isSelected ? '2px solid var(--hand-active-border)' : 'none',
         outlineOffset: '-2px',
       };
 
@@ -3158,7 +3163,7 @@ function RunwabbleBoard({ board, selectedCells, onCellClick }) {
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onCellClick && onCellClick(idx); }
               }}
             >
-              {isSelected && <span style={{ fontSize: 12, color: '#f57c00' }}>●</span>}
+              {isSelected && <span style={{ fontSize: 12, color: 'var(--info-text)' }}>●</span>}
             </div>
           </td>
         );
@@ -3190,16 +3195,16 @@ function RunwabbleHandDisplay({ hand, selectedIndices, onCardClick, onFlipClick,
       style={{
         margin: '12px 0',
         padding: '10px',
-        backgroundColor: isActive ? '#e3f2fd' : '#f5f5f5',
+        backgroundColor: isActive ? 'var(--hand-active-bg)' : 'var(--hand-inactive-bg)',
         borderRadius: '8px',
-        border: isActive ? '2px solid #1976d2' : '1px solid #ccc',
+        border: isActive ? '2px solid var(--hand-active-border)' : '1px solid var(--hand-inactive-border)',
         display: 'inline-block',
       }}
     >
-      <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#444' }}>
+      <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: 'var(--hand-label-color)' }}>
         {label}
         {isActive && (
-          <span style={{ color: '#1976d2', marginLeft: '8px' }}>
+          <span style={{ color: 'var(--info-text)', marginLeft: '8px' }}>
             ← click tiles to select, then click grid cells
           </span>
         )}
@@ -3229,8 +3234,8 @@ function RunwabbleHandDisplay({ hand, selectedIndices, onCardClick, onFlipClick,
                     fontSize: '10px',
                     padding: '1px 6px',
                     cursor: 'pointer',
-                    backgroundColor: tile.flipped ? '#ff9800' : '#e0e0e0',
-                    color: tile.flipped ? '#fff' : '#333',
+                    backgroundColor: tile.flipped ? 'var(--card-back-bg)' : 'var(--card-empty-bg)',
+                    color: tile.flipped ? '#fff' : 'var(--page-text)',
                     border: 'none',
                     borderRadius: '3px',
                   }}
@@ -3493,7 +3498,7 @@ class RunwabbleGame extends React.Component {
           style={{
             marginBottom: '10px',
             padding: '8px 12px',
-            backgroundColor: gameOver ? '#e8f5e9' : '#e3f2fd',
+            backgroundColor: gameOver ? 'var(--last-turn-bg)' : 'var(--hand-active-bg)',
             borderRadius: '4px',
             fontSize: '14px',
             fontWeight: gameOver ? '600' : 'normal',
@@ -3504,15 +3509,15 @@ class RunwabbleGame extends React.Component {
 
         {/* Scoreboard */}
         <div style={{ display: 'flex', gap: '24px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <strong style={{ color: currentPlayer === 0 && !gameOver ? '#1976d2' : '#333' }}>
+          <strong style={{ color: currentPlayer === 0 && !gameOver ? 'var(--info-text)' : 'var(--page-text)' }}>
             {p1Name}: {p1Score} pts{currentPlayer === 0 && !gameOver ? ' ◀' : ''}
           </strong>
-          <strong style={{ color: currentPlayer === 1 && !gameOver ? '#1976d2' : '#333' }}>
+          <strong style={{ color: currentPlayer === 1 && !gameOver ? 'var(--info-text)' : 'var(--page-text)' }}>
             {p2Name}: {p2Score} pts{currentPlayer === 1 && !gameOver ? ' ◀' : ''}
           </strong>
-          <span style={{ color: '#888', fontSize: '13px' }}>Tiles in bag: {bag.length}</span>
+          <span style={{ color: 'var(--score-label-color)', fontSize: '13px' }}>Tiles in bag: {bag.length}</span>
           {lastMoveInfo && (
-            <span style={{ color: '#555', fontSize: '12px', fontStyle: 'italic' }}>{lastMoveInfo}</span>
+            <span style={{ color: 'var(--score-label-color)', fontSize: '12px', fontStyle: 'italic' }}>{lastMoveInfo}</span>
           )}
         </div>
 
@@ -3574,8 +3579,8 @@ class RunwabbleGame extends React.Component {
         )}
 
         {/* Rules reference */}
-        <details style={{ marginTop: '20px', fontSize: '13px', color: '#555' }}>
-          <summary style={{ cursor: 'pointer', fontWeight: '600', color: '#333' }}>Runwabble Rules</summary>
+        <details style={{ marginTop: '20px', fontSize: '13px', color: 'var(--score-label-color)' }}>
+          <summary style={{ cursor: 'pointer', fontWeight: '600', color: 'var(--page-text)' }}>Runwabble Rules</summary>
           <div style={{ marginTop: '8px', lineHeight: '1.7' }}>
             <p><strong>Grid:</strong> 14×14. Place 1–5 tiles per turn in a straight horizontal or vertical line.</p>
             <p><strong>First move:</strong> Place 2–5 tiles anywhere. All later plays must connect to existing tiles.</p>
