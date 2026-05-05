@@ -1133,7 +1133,7 @@ class CribbageGame extends React.Component {
           p1Name: newState.p1Name || this.state.p1Name,
           p2Name: newState.p2Name || this.state.p2Name,
           lastTurnInfo: newState.lastTurnInfo || null,
-          turnStartScores: newState.turnStartScores || this.state.turnStartScores,
+          turnStartScores: newState.turnStartScores ?? this.state.turnStartScores,
         });
       });
     } else {
@@ -1289,8 +1289,8 @@ class CribbageGame extends React.Component {
 
     // Compute score delta for this turn
     const currentScores = computeGridScores(cardLayout);
-    const rowDelta = currentScores.rowTotal - (turnStartScores ? turnStartScores.rowTotal : 0);
-    const colDelta = currentScores.colTotal - (turnStartScores ? turnStartScores.colTotal : 0);
+    const rowDelta = currentScores.rowTotal - turnStartScores.rowTotal;
+    const colDelta = currentScores.colTotal - turnStartScores.colTotal;
     const lastTurnInfo = {
       wasRowTurn: rowTurn,
       rowDelta,
