@@ -38,7 +38,7 @@ Hands can score points in different ways. The total points for a hand is equal t
 
 ### Pairs
 
-A pair of cards is worth 2 points (e.g. two kings). A three of a kind contains 3 pairs, and is thus worth 6 points. A 4 of a kind contains 6 pairs (4 choose 2) and is worth 12 points.
+A pair of cards with matching rank is worth 2 points. If both cards in the pair are the same color (both red or both black), the pair is worth 3 points instead — same-color pairs are rarer. A three of a kind contains 3 pairs and is thus worth 6–7 points. A four of a kind contains 6 pairs for 12–14 points, plus a **+4 rarity bonus**, bringing the total pair contribution to 16–18 points. Four of a kind is statistically very rare and is rewarded accordingly.
 
 ### Fifteens
 
@@ -58,7 +58,7 @@ AA44J: This hand has 2 pairs for 4 points, and four 15s for 8 points (4 possible
 
 44566: This hand has 2 pairs for 4 points, 4 runs of length 3 (versions of 456 using either 4 and 6) for 12 points, and 4 15s (4+5+6=15) for 8 points, for a total of 24 points.
 
-5555J: This hand has a four of a kind for 12 points, 4 15s that consist of 3 5s for 8 points, and 4 15s that consist of J5 for another 8 points, for a total of 28 points. This is the best hand in the game.
+5555J: This hand has a four of a kind — 14 points from 6 pairs (2 same-color pairs × 3 pts + 4 cross-color pairs × 2 pts) plus the +4 four-of-a-kind rarity bonus = 18 pts — and 4 fifteens that consist of 3 5s for 8 points, and 4 fifteens that consist of J5 for another 8 points, for a total of 34 points. This is the best hand in the game.
 
 To understand the scoring better, I recommend filling up the board randomly with cards and trying to count points, using the reported totals next to each row and column as a guide.
 

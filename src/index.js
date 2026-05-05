@@ -1859,11 +1859,34 @@ function scorePairs(hand) {
   for (let i = 0 ; i < hand.length ; i++) {
     for (let j = i+1 ; j < hand.length ; j++) {
       if (hand[i].rank === hand[j].rank) {
-        score += 2;
+        // Same-color pairs (both red or both black) are rarer and worth 3 pts;
+        // cross-color pairs are worth the standard 2 pts.
+        const sameColor = hand[i].suit && hand[j].suit &&
+          (isRedSuit(hand[i].suit) === isRedSuit(hand[j].suit));
+        score += sameColor ? 3 : 2;
       }
     }
   }
   return score;
+}
+
+/**
+ * Bonus points for four of a kind beyond the pairs score.
+ * Four of a kind is statistically very rare (+4 bonus).
+ */
+function scoreFourOfAKind(hand) {
+  const rankCounts = {};
+  for (const card of hand) {
+    if (card.rank) {
+      rankCounts[card.rank] = (rankCounts[card.rank] || 0) + 1;
+    }
+  }
+  for (const count of Object.values(rankCounts)) {
+    if (count >= 4) {
+      return 4;
+    }
+  }
+  return 0;
 }
 
 function scoreFlush(hand) {
@@ -1956,6 +1979,7 @@ function scoreHand(hand) {
   score += scoreFlush(hand);
   score += scoreColor(hand);
   score += scorePairs(hand);
+  score += scoreFourOfAKind(hand);
   score += scoreRuns(hand);
 
   return score;
