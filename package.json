@@ -21,6 +21,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "test:a11y": "playwright test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -42,7 +43,10 @@
     ]
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.1",
     "@axe-core/react": "^4.11.3",
-    "gh-pages": "^6.3.0"
+    "@playwright/test": "^1.49.1",
+    "gh-pages": "^6.3.0",
+    "serve": "^14.2.4"
   }
 }
