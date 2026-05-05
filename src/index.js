@@ -21,6 +21,8 @@ const CENTER = Math.floor(CELLS / 2); // index of the pre-placed centre card
 // A standard 52-card deck covers a 7×7 board (49 cards) with room to spare.
 // For grids > 52 cells, increase NUM_DECKS accordingly.
 const NUM_DECKS = Math.ceil(CELLS / 52);
+// Maximum cards allowed in a single row or column (standard cribbage hand size).
+const MAX_CARDS_PER_LINE = 5;
 
 // =========================================================
 // PeerSync – thin wrapper around PeerJS for state syncing
@@ -802,6 +804,43 @@ function dealHands(deck) {
   return { p1Hand, p2Hand, remainingDeck };
 }
 
+/** Count cards already placed in a given row of cardLayout (flat array). */
+function countCardsInRow(cardLayout, row) {
+  let count = 0;
+  for (let c = 0; c < GRID_SIZE; c++) {
+    if (cardLayout[row * GRID_SIZE + c].rank) count++;
+  }
+  return count;
+}
+
+/** Count cards already placed in a given column of cardLayout (flat array). */
+function countCardsInCol(cardLayout, col) {
+  let count = 0;
+  for (let r = 0; r < GRID_SIZE; r++) {
+    if (cardLayout[r * GRID_SIZE + col].rank) count++;
+  }
+  return count;
+}
+
+/**
+ * Count empty cells where a card can still legally be placed:
+ * cell must be empty, and neither its row nor its column already
+ * has MAX_CARDS_PER_LINE cards in it.
+ */
+function countValidPlacements(cardLayout) {
+  let count = 0;
+  for (let i = 0; i < CELLS; i++) {
+    if (i === CENTER) continue;
+    if (cardLayout[i].rank) continue;
+    const row = Math.floor(i / GRID_SIZE);
+    const col = i % GRID_SIZE;
+    if (countCardsInRow(cardLayout, row) >= MAX_CARDS_PER_LINE) continue;
+    if (countCardsInCol(cardLayout, col) >= MAX_CARDS_PER_LINE) continue;
+    count++;
+  }
+  return count;
+}
+
 // =========================================================
 // CardGrid
 // =========================================================
@@ -964,6 +1003,8 @@ class CribbageGame extends React.Component {
         selectedHandIndex: null,
         p1Name: props.initialGameState.p1Name || 'Host',
         p2Name: props.initialGameState.p2Name || 'Guest',
+        cardsPlacedThisTurn: 0,
+        placementError: null,
       };
     } else {
       const deck = makeDeck();
@@ -983,6 +1024,8 @@ class CribbageGame extends React.Component {
         cardLayout: cl,
         rowTurn: true,
         selectedHandIndex: null,
+        cardsPlacedThisTurn: 0,
+        placementError: null,
       };
     }
   }
@@ -997,6 +1040,8 @@ class CribbageGame extends React.Component {
           cardLayout: newState.cardLayout,
           rowTurn: newState.rowTurn,
           selectedHandIndex: null,
+          cardsPlacedThisTurn: newState.cardsPlacedThisTurn || 0,
+          placementError: null,
           // Update names when they arrive (joiner sends back p2Name on first sync)
           p1Name: newState.p1Name || this.state.p1Name,
           p2Name: newState.p2Name || this.state.p2Name,
@@ -1033,8 +1078,8 @@ class CribbageGame extends React.Component {
     const idx = state.rowTurn ? 0 : 1;
     const player = players[idx];
     const hand = state.rowTurn ? state.p1Hand : state.p2Hand;
-    const hasCards = state.cardLayout.some(c => !c.rank);
-    if (player.type === 'cpu' && hasCards && hand && hand.length > 0) {
+    const hasValidCells = countValidPlacements(state.cardLayout) > 0;
+    if (player.type === 'cpu' && hasValidCells && hand && hand.length > 0) {
       setTimeout(() => this.cpuMoveHandler(), 1200);
     }
   }
@@ -1059,6 +1104,8 @@ class CribbageGame extends React.Component {
       cardLayout: cl,
       rowTurn: newRowTurn,
       selectedHandIndex: null,
+      cardsPlacedThisTurn: 0,
+      placementError: null,
     };
 
     if (this.props.peerSync) {
@@ -1089,12 +1136,24 @@ class CribbageGame extends React.Component {
       if (player.type === 'cpu') return;
     }
 
-    const { selectedHandIndex, rowTurn } = this.state;
+    const { selectedHandIndex, rowTurn, cardLayout } = this.state;
     if (selectedHandIndex === null) return; // no card selected
 
     const hand = rowTurn ? this.state.p1Hand : this.state.p2Hand;
     const cardToPlace = hand[selectedHandIndex];
     if (!cardToPlace || !cardToPlace.rank) return;
+
+    // Enforce MAX_CARDS_PER_LINE limit for the target row and column
+    const row = Math.floor(i / GRID_SIZE);
+    const col = i % GRID_SIZE;
+    if (countCardsInRow(cardLayout, row) >= MAX_CARDS_PER_LINE) {
+      this.setState({ placementError: `Row ${row + 1} already has ${MAX_CARDS_PER_LINE} cards – choose a different row.` });
+      return;
+    }
+    if (countCardsInCol(cardLayout, col) >= MAX_CARDS_PER_LINE) {
+      this.setState({ placementError: `Column ${col + 1} already has ${MAX_CARDS_PER_LINE} cards – choose a different column.` });
+      return;
+    }
 
     // Remove card from hand, draw from deck if available
     const newHand = hand.filter((_, idx) => idx !== selectedHandIndex);
@@ -1104,17 +1163,46 @@ class CribbageGame extends React.Component {
       newDeck = newDeck.slice(1);
     }
 
-    const newLayout = this.state.cardLayout.slice();
+    const newLayout = cardLayout.slice();
     newLayout[i] = cardToPlace;
-    const newRowTurn = !rowTurn;
+    // Turn does NOT switch automatically – player must click "End Turn"
 
     const newState = {
       deck: newDeck,
       p1Hand: rowTurn ? newHand : this.state.p1Hand,
       p2Hand: rowTurn ? this.state.p2Hand : newHand,
       cardLayout: newLayout,
+      rowTurn: rowTurn,
+      selectedHandIndex: null,
+      cardsPlacedThisTurn: this.state.cardsPlacedThisTurn + 1,
+      placementError: null,
+    };
+
+    if (this.props.peerSync) {
+      this.props.peerSync.state = newState;
+      this.props.peerSync.sync();
+    }
+
+    this.setState(newState);
+  }
+
+  /** End the current player's turn and hand over to the opponent. */
+  handleEndTurn() {
+    // Multiplayer: only the active player can end the turn
+    if (this.props.peerSync && !this.isMyTurn()) return;
+
+    const { deck, p1Hand, p2Hand, cardLayout } = this.state;
+    const newRowTurn = !this.state.rowTurn;
+
+    const newState = {
+      deck,
+      p1Hand,
+      p2Hand,
+      cardLayout,
       rowTurn: newRowTurn,
       selectedHandIndex: null,
+      cardsPlacedThisTurn: 0,
+      placementError: null,
     };
 
     if (this.props.peerSync) {
@@ -1128,7 +1216,7 @@ class CribbageGame extends React.Component {
   }
 
   cpuMoveHandler() {
-    const { rowTurn, cardLayout } = this.state;
+    const { rowTurn, cardLayout, cardsPlacedThisTurn } = this.state;
     const hand = rowTurn ? this.state.p1Hand : this.state.p2Hand;
     const players = this.props.players || [
       { type: 'human', name: 'P1', cpuLevel: 5, role: 'rows' },
@@ -1137,8 +1225,21 @@ class CribbageGame extends React.Component {
     const playerIdx = rowTurn ? 0 : 1;
     const cpuLevel = players[playerIdx].cpuLevel || 5;
 
+    // Compute valid cells once; CPU plays up to MAX_CARDS_PER_LINE cards per turn.
+    const validCells = countValidPlacements(cardLayout);
+    if (cardsPlacedThisTurn >= MAX_CARDS_PER_LINE || validCells === 0) {
+      this.handleEndTurn();
+      return;
+    }
+
+    // getCpuHandMove already filters out cells violating the row/col limit
+    // (via getNextMoveRatings), so the returned move is always legal.
     const move = getCpuHandMove(cardLayout, hand, cpuLevel);
-    if (!move) return;
+    if (!move) {
+      // No valid move available; end the CPU's turn
+      this.handleEndTurn();
+      return;
+    }
 
     const { handIndex, gridIndex } = move;
 
@@ -1152,24 +1253,35 @@ class CribbageGame extends React.Component {
 
     const newLayout = cardLayout.slice();
     newLayout[gridIndex] = hand[handIndex];
-    const newRowTurn = !rowTurn;
+    const newCardsPlaced = cardsPlacedThisTurn + 1;
+    // Compute valid cells for the updated layout to decide whether to continue.
+    const nextValidCells = countValidPlacements(newLayout);
 
     const newState = {
       deck: newDeck,
       p1Hand: rowTurn ? newHand : this.state.p1Hand,
       p2Hand: rowTurn ? this.state.p2Hand : newHand,
       cardLayout: newLayout,
-      rowTurn: newRowTurn,
+      rowTurn: rowTurn,
       selectedHandIndex: null,
+      cardsPlacedThisTurn: newCardsPlaced,
+      placementError: null,
     };
 
     this.setState(newState, () => {
-      this._maybeTriggerCpu(newState);
+      // Continue placing cards or end turn
+      const stillHasCards = newHand.length > 0;
+      if (newCardsPlaced < MAX_CARDS_PER_LINE && stillHasCards && nextValidCells > 0) {
+        setTimeout(() => this.cpuMoveHandler(), 800);
+      } else {
+        setTimeout(() => this.handleEndTurn(), 600);
+      }
     });
   }
 
   render() {
     const { cardLayout, rowTurn, p1Hand, p2Hand, selectedHandIndex, deck,
+            cardsPlacedThisTurn, placementError,
             p1Name: stateP1Name, p2Name: stateP2Name } = this.state;
     const { peerSync, isHost, players } = this.props;
 
@@ -1180,9 +1292,9 @@ class CribbageGame extends React.Component {
     const resolvedP1Name = peerSync ? (stateP1Name || 'Host') : p1Config.name;
     const resolvedP2Name = peerSync ? (stateP2Name || 'Guest') : p2Config.name;
 
-    // Determine round-over: all 24 non-center cells filled
-    const emptyCells = cardLayout.filter((c, idx) => idx !== CENTER && !c.rank).length;
-    const roundOver = emptyCells === 0;
+    // Determine round-over: no valid placements remain (respects 5-card row/col limit)
+    const validCellsLeft = countValidPlacements(cardLayout);
+    const roundOver = validCellsLeft === 0;
 
     // Turn text
     let turnText;
@@ -1310,6 +1422,40 @@ class CribbageGame extends React.Component {
         <p style={{ fontSize: '12px', color: '#888' }}>
           Cards remaining in deck: {deck.length}
         </p>
+
+        {/* End Turn button – visible during a human player's turn */}
+        {!roundOver && isLocalHumanTurn && (
+          <div style={{ margin: '12px 0' }}>
+            <button
+              onClick={() => this.handleEndTurn()}
+              aria-label="End your turn and pass play to the other player"
+              style={{
+                padding: '10px 28px',
+                fontSize: '16px',
+                cursor: 'pointer',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: '#388e3c',
+                color: '#fff',
+                fontWeight: 'bold',
+              }}
+            >
+              End Turn {cardsPlacedThisTurn > 0 ? `(${cardsPlacedThisTurn} card${cardsPlacedThisTurn !== 1 ? 's' : ''} placed)` : ''}
+            </button>
+            {cardsPlacedThisTurn === 0 && (
+              <span style={{ marginLeft: '10px', fontSize: '13px', color: '#777' }}>
+                Place at least one card before ending your turn.
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Placement error message */}
+        {placementError && (
+          <p role="alert" style={{ color: '#c62828', fontSize: '14px', margin: '6px 0' }}>
+            ⚠ {placementError}
+          </p>
+        )}
       </div>
     );
   }
@@ -1730,12 +1876,26 @@ function getNextMoveRatings(cardLayout, nextCard) {
   let openIndices = [];
   let netRatings = [];
 
-  for (let row = 0 ; row < 5 ; row++) {
-    for (let col = 0 ; col < 5 ; col ++) {
+  for (let row = 0 ; row < GRID_SIZE ; row++) {
+    // Skip rows that already have MAX_CARDS_PER_LINE cards
+    let rowCount = 0;
+    for (let c = 0; c < GRID_SIZE; c++) {
+      if (array2d[row][c].rank) rowCount++;
+    }
+    if (rowCount >= MAX_CARDS_PER_LINE) continue;
+
+    for (let col = 0 ; col < GRID_SIZE ; col ++) {
       if (array2d[row][col].rank) {
         continue;
       }
-      
+
+      // Skip columns that already have MAX_CARDS_PER_LINE cards
+      let colCount = 0;
+      for (let r = 0; r < GRID_SIZE; r++) {
+        if (array2d[r][col].rank) colCount++;
+      }
+      if (colCount >= MAX_CARDS_PER_LINE) continue;
+
       let baselineRowRating = getRowRating(array2d, row);
       let baselineColRating = getColRating(array2d, col);
 
