@@ -208,24 +208,52 @@ const inputStyle = {
   boxSizing: 'border-box',
 };
 
+const lastTurnStyle = {
+  display: 'inline-block',
+  margin: '8px 0 12px',
+  padding: '10px 16px',
+  borderRadius: '6px',
+  backgroundColor: '#e8f5e9',
+  border: '1px solid #a5d6a7',
+  fontSize: '14px',
+  lineHeight: '1.6',
+};
+
 // =========================================================
 // GameSetupScreen – choose player names / CPU config
 // =========================================================
 
 function GameSetupScreen({ onStart }) {
   const [gameMode, setGameMode] = useState('cribbage');
-  const [p1Type, setP1Type] = useState('human');
-  const [p1Name, setP1Name] = useState('Player 1');
-  const [p1Level, setP1Level] = useState(5);
-  const [p2Type, setP2Type] = useState('cpu');
-  const [p2Name, setP2Name] = useState('Player 2');
-  const [p2Level, setP2Level] = useState(5);
+  const [numPlayers, setNumPlayers] = useState(2);
+  // Arrays indexed by player slot (0-3)
+  const [playerTypes,  setPlayerTypes]  = useState(['human', 'cpu',   'cpu',     'cpu']);
+  const [playerNames,  setPlayerNames]  = useState(['Player 1', 'Player 2', 'Player 3', 'Player 4']);
+  const [playerLevels, setPlayerLevels] = useState([5, 5, 5, 5]);
+
+  function setType(idx, val) {
+    const next = [...playerTypes]; next[idx] = val; setPlayerTypes(next);
+  }
+  function setName(idx, val) {
+    const next = [...playerNames]; next[idx] = val; setPlayerNames(next);
+  }
+  function setLevel(idx, val) {
+    const next = [...playerLevels]; next[idx] = val; setPlayerLevels(next);
+  }
+
+  // At least one human required
+  const humanCount = playerTypes.slice(0, numPlayers).filter(t => t === 'human').length;
+  const canStart = humanCount >= 1;
 
   function handleStart() {
-    const players = [
-      { type: p1Type, name: p1Type === 'cpu' ? 'CPU' : p1Name, cpuLevel: p1Level, role: 'rows' },
-      { type: p2Type, name: p2Type === 'cpu' ? 'CPU' : p2Name, cpuLevel: p2Level, role: 'cols' },
-    ];
+    const zones = assignScoringZones(numPlayers);
+    const players = Array.from({ length: numPlayers }, (_, i) => ({
+      type:     playerTypes[i],
+      name:     playerTypes[i] === 'cpu' ? `CPU ${i + 1}` : playerNames[i],
+      cpuLevel: playerLevels[i],
+      role:     playerRoleLabel(i, numPlayers),
+      zone:     zones[i],
+    }));
     onStart(players, gameMode);
   }
 
@@ -237,6 +265,55 @@ function GameSetupScreen({ onStart }) {
     textAlign: 'left',
   };
   const labelStyle = { fontWeight: '600', display: 'block', marginBottom: '8px' };
+
+  function renderPlayerSection(idx) {
+    const color = PLAYER_COLORS[idx % PLAYER_COLORS.length];
+    const roleLabel = playerRoleLabel(idx, numPlayers);
+    const header = gameMode === 'runwabble'
+      ? `Player ${idx + 1}`
+      : `Player ${idx + 1} – ${roleLabel}`;
+    const sliderId = `p${idx + 1}-cpu-slider`;
+    return (
+      <div key={idx} style={{ ...sectionStyle, borderColor: color }}>
+        <span style={{ ...labelStyle, color }}>{header}</span>
+        <div style={{ marginBottom: '8px' }}>
+          <label>
+            <input
+              type="radio" value="human" checked={playerTypes[idx] === 'human'}
+              onChange={() => setType(idx, 'human')}
+            />
+            {' '}Human
+          </label>
+          {'  '}
+          <label>
+            <input
+              type="radio" value="cpu" checked={playerTypes[idx] === 'cpu'}
+              onChange={() => setType(idx, 'cpu')}
+            />
+            {' '}CPU
+          </label>
+        </div>
+        {playerTypes[idx] === 'human' && (
+          <input
+            style={inputStyle} type="text" placeholder="Name"
+            value={playerNames[idx]} onChange={(e) => setName(idx, e.target.value)}
+            aria-label={`Player ${idx + 1} name`}
+          />
+        )}
+        {playerTypes[idx] === 'cpu' && (
+          <div style={{ width: '200px' }}>
+            <Typography id={sliderId} gutterBottom>CPU Difficulty: {playerLevels[idx]}</Typography>
+            <Slider
+              value={playerLevels[idx]} aria-labelledby={sliderId}
+              valueLabelDisplay="auto"
+              onChange={(e, v) => setLevel(idx, v)}
+              step={1} marks min={1} max={10}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={overlayStyle} role="dialog" aria-modal="true" aria-labelledby="setup-heading">
@@ -270,87 +347,34 @@ function GameSetupScreen({ onStart }) {
           )}
         </div>
 
-        {/* P1 */}
-        <div style={sectionStyle}>
-          <span style={labelStyle}>{gameMode === 'runwabble' ? 'Player 1' : 'Player 1 – Rows'}</span>
-          <div style={{ marginBottom: '8px' }}>
-            <label>
-              <input
-                type="radio" value="human" checked={p1Type === 'human'}
-                onChange={() => setP1Type('human')}
-              />
-              {' '}Human
-            </label>
-            {'  '}
-            <label>
-              <input
-                type="radio" value="cpu" checked={p1Type === 'cpu'}
-                onChange={() => setP1Type('cpu')}
-              />
-              {' '}CPU
-            </label>
-          </div>
-          {p1Type === 'human' && (
-            <input
-              style={inputStyle} type="text" placeholder="Name"
-              value={p1Name} onChange={(e) => setP1Name(e.target.value)}
-              aria-label="Player 1 name"
-            />
-          )}
-          {p1Type === 'cpu' && (
-            <div style={{ width: '200px' }}>
-              <Typography id="p1-cpu-slider" gutterBottom>CPU Difficulty: {p1Level}</Typography>
-              <Slider
-                value={p1Level} aria-labelledby="p1-cpu-slider"
-                valueLabelDisplay="auto"
-                onChange={(e, v) => setP1Level(v)}
-                step={1} marks min={1} max={10}
-              />
+        {/* Number of players (Cribbage only; Runwabble stays 2-player) */}
+        {gameMode === 'cribbage' && (
+          <div style={sectionStyle}>
+            <span style={labelStyle}>Number of Players</span>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              {[2, 3, 4].map(n => (
+                <label key={n}>
+                  <input
+                    type="radio" value={n} checked={numPlayers === n}
+                    onChange={() => setNumPlayers(n)}
+                  />
+                  {' '}{n}
+                </label>
+              ))}
             </div>
-          )}
-        </div>
-
-        {/* P2 */}
-        <div style={sectionStyle}>
-          <span style={labelStyle}>{gameMode === 'runwabble' ? 'Player 2' : 'Player 2 – Columns'}</span>
-          <div style={{ marginBottom: '8px' }}>
-            <label>
-              <input
-                type="radio" value="human" checked={p2Type === 'human'}
-                onChange={() => setP2Type('human')}
-              />
-              {' '}Human
-            </label>
-            {'  '}
-            <label>
-              <input
-                type="radio" value="cpu" checked={p2Type === 'cpu'}
-                onChange={() => setP2Type('cpu')}
-              />
-              {' '}CPU
-            </label>
           </div>
-          {p2Type === 'human' && (
-            <input
-              style={inputStyle} type="text" placeholder="Name"
-              value={p2Name} onChange={(e) => setP2Name(e.target.value)}
-              aria-label="Player 2 name"
-            />
-          )}
-          {p2Type === 'cpu' && (
-            <div style={{ width: '200px' }}>
-              <Typography id="p2-cpu-slider" gutterBottom>CPU Difficulty: {p2Level}</Typography>
-              <Slider
-                value={p2Level} aria-labelledby="p2-cpu-slider"
-                valueLabelDisplay="auto"
-                onChange={(e, v) => setP2Level(v)}
-                step={1} marks min={1} max={10}
-              />
-            </div>
-          )}
-        </div>
+        )}
 
-        <button style={btnStyle} onClick={handleStart}>
+        {/* Player sections */}
+        {Array.from({ length: gameMode === 'runwabble' ? 2 : numPlayers }, (_, i) => renderPlayerSection(i))}
+
+        {!canStart && (
+          <p role="alert" style={{ color: '#c62828', fontSize: '13px', margin: '4px 0 8px' }}>
+            At least one player must be Human.
+          </p>
+        )}
+
+        <button style={btnStyle} onClick={handleStart} disabled={!canStart}>
           Start Game
         </button>
       </div>
@@ -924,6 +948,101 @@ function computeGridScores(cardLayout) {
 }
 
 // =========================================================
+// Multi-player helpers
+// =========================================================
+
+/** Player colour palette used throughout the UI. */
+const PLAYER_COLORS = ['#1565c0', '#b71c1c', '#1b5e20', '#e65100'];
+
+/**
+ * Role label for a given player slot given the total player count.
+ * Used in setup screen and turn display.
+ */
+function playerRoleLabel(playerIndex, numPlayers) {
+  if (numPlayers === 2) return playerIndex === 0 ? 'rows' : 'cols';
+  if (numPlayers === 3) {
+    const labels = ['rows', 'even cols', 'odd cols'];
+    return labels[playerIndex] || `player ${playerIndex + 1}`;
+  }
+  // 4 players
+  const labels = ['top rows', 'bottom rows', 'left cols', 'right cols'];
+  return labels[playerIndex] || `player ${playerIndex + 1}`;
+}
+
+/**
+ * Assign scoring zones (rows / cols) to each player.
+ * Returns an array of { rows: [...], cols: [...] } for each player.
+ *
+ * 2 players : P1=all rows,        P2=all cols
+ * 3 players : P1=all rows,        P2=even cols (0,2,4,6), P3=odd cols (1,3,5)
+ * 4 players : P1=rows 0–3,        P2=rows 4–6,
+ *             P3=cols 0–3,        P4=cols 4–6
+ */
+function assignScoringZones(numPlayers) {
+  const allRows = Array.from({ length: GRID_SIZE }, (_, i) => i);
+  const allCols = Array.from({ length: GRID_SIZE }, (_, i) => i);
+  const half = Math.ceil(GRID_SIZE / 2); // 4 for a 7-wide grid
+  switch (numPlayers) {
+    case 2:
+      return [
+        { rows: allRows, cols: [] },
+        { rows: [], cols: allCols },
+      ];
+    case 3:
+      return [
+        { rows: allRows, cols: [] },
+        { rows: [], cols: allCols.filter(c => c % 2 === 0) },
+        { rows: [], cols: allCols.filter(c => c % 2 !== 0) },
+      ];
+    case 4:
+    default:
+      return [
+        { rows: allRows.slice(0, half), cols: [] },
+        { rows: allRows.slice(half),    cols: [] },
+        { rows: [], cols: allCols.slice(0, half) },
+        { rows: [], cols: allCols.slice(half) },
+      ];
+  }
+}
+
+/**
+ * Compute the total score for a single player from their assigned scoring zone.
+ */
+function computePlayerScore(cardLayout, zone) {
+  let score = 0;
+  for (const row of zone.rows) {
+    const rowCards = [];
+    for (let c = 0; c < GRID_SIZE; c++) {
+      const card = cardLayout[row * GRID_SIZE + c];
+      if (card && card.rank) rowCards.push(card);
+    }
+    if (rowCards.length > 1) score += scoreHand(rowCards);
+  }
+  for (const col of zone.cols) {
+    const colCards = [];
+    for (let r = 0; r < GRID_SIZE; r++) {
+      const card = cardLayout[r * GRID_SIZE + col];
+      if (card && card.rank) colCards.push(card);
+    }
+    if (colCards.length > 1) score += scoreHand(colCards);
+  }
+  return score;
+}
+
+/**
+ * Deal 5-card hands to numPlayers players from deck (deck[0] is the center card,
+ * so pass deck.slice(1) here).
+ * Returns { hands: [[...], ...], remainingDeck: [...] }.
+ */
+function dealHandsMulti(deck, numPlayers) {
+  const hands = [];
+  for (let p = 0; p < numPlayers; p++) {
+    hands.push(deck.slice(p * 5, (p + 1) * 5));
+  }
+  return { hands, remainingDeck: deck.slice(numPlayers * 5) };
+}
+
+// =========================================================
 // CardGrid
 // =========================================================
 
@@ -981,6 +1100,21 @@ class CardGrid extends React.Component {
   }
 
 
+  /**
+   * Given a row or col index and a direction ('row'|'col'), return the player
+   * index who owns that line (based on props.zones), or -1 if unowned.
+   */
+  ownerOf(lineIndex, direction) {
+    const zones = this.props.zones;
+    if (!zones) return direction === 'row' ? 0 : 1; // 2-player legacy
+    for (let p = 0; p < zones.length; p++) {
+      const zone = zones[p];
+      if (direction === 'row' && zone.rows.includes(lineIndex)) return p;
+      if (direction === 'col' && zone.cols.includes(lineIndex)) return p;
+    }
+    return -1;
+  }
+
   render() {
     let rowScores = this.getRowScores();
     let columnScores = this.getColumnScores();
@@ -1011,8 +1145,10 @@ class CardGrid extends React.Component {
       );
     }
     for(let c = 0; c < GRID_SIZE; c++) {
+      const owner = this.ownerOf(c, 'col');
+      const ownerColor = owner >= 0 ? PLAYER_COLORS[owner % PLAYER_COLORS.length] : '#333';
       topRowElements.push(
-        <th key={`col-score-${c}`} scope="col">
+        <th key={`col-score-${c}`} scope="col" style={{ color: ownerColor }}>
           <span className="sr-only">{`Column ${c + 1} score: `}</span>
           <span>{columnScores[c]}</span>
         </th>
@@ -1028,9 +1164,11 @@ class CardGrid extends React.Component {
     // Game rows 1–GRID_SIZE
     let bodyRows = [];
     for (let row = 0; row < GRID_SIZE; row++) {
+      const rowOwner = this.ownerOf(row, 'row');
+      const rowOwnerColor = rowOwner >= 0 ? PLAYER_COLORS[rowOwner % PLAYER_COLORS.length] : '#333';
       let rowElements = [];
       rowElements.push(
-        <th key="row-score" scope="row">
+        <th key="row-score" scope="row" style={{ color: rowOwnerColor }}>
           <span className="sr-only">{`Row ${row + 1} score: `}</span>
           <span>{rowScores[row]}</span>
         </th>
@@ -1042,11 +1180,14 @@ class CardGrid extends React.Component {
       bodyRows.push(<tr key={`row-${row}`}>{rowElements}</tr>);
     }
 
+    const numPlayers = this.props.zones ? this.props.zones.length : 2;
+    const captionText = numPlayers === 2
+      ? `Cribbage Grid – ${GRID_SIZE}×${GRID_SIZE} card grid. P1 scores for rows (left totals); P2/CPU scores for columns (top totals).`
+      : `Cribbage Grid – ${GRID_SIZE}×${GRID_SIZE} card grid. ${numPlayers}-player game – row/column colours show each player's scoring zone.`;
+
     return (
       <table>
-        <caption className="sr-only">
-          Cribbage Grid – {GRID_SIZE}×{GRID_SIZE} card grid. P1 scores for rows (left totals); P2/CPU scores for columns (top totals).
-        </caption>
+        <caption className="sr-only">{captionText}</caption>
         <thead>
           <tr>{topRowElements}</tr>
         </thead>
@@ -1075,7 +1216,7 @@ class CribbageGame extends React.Component {
     super(props);
 
     if (props.initialGameState) {
-      // Multiplayer: use the shared initial state from the host
+      // Online multiplayer: use the shared initial state from the host
       const initLayout = props.initialGameState.cardLayout;
       this.state = {
         deck: props.initialGameState.deck,
@@ -1092,6 +1233,7 @@ class CribbageGame extends React.Component {
         turnStartScores: computeGridScores(initLayout),
       };
     } else {
+      const numPlayers = (props.players && props.players.length) || 2;
       const deck = makeDeck();
       shuffleDeck(deck);
 
@@ -1099,22 +1241,43 @@ class CribbageGame extends React.Component {
       let cl = Array(CELLS).fill(null).map(() => ({ rank: null, suit: null }));
       cl[CENTER] = deck[0];
 
-      // deal hands from the rest of the deck
-      const { p1Hand, p2Hand, remainingDeck } = dealHands(deck.slice(1));
+      const zones = this._getZones(numPlayers, props.players);
+      const { hands, remainingDeck } = dealHandsMulti(deck.slice(1), numPlayers);
 
       this.state = {
         deck: remainingDeck,
-        p1Hand,
-        p2Hand,
+        hands,
         cardLayout: cl,
-        rowTurn: true,
+        currentPlayerIndex: 0,
         selectedHandIndex: null,
         cardsPlacedThisTurn: 0,
         placementError: null,
         lastTurnInfo: null,
-        turnStartScores: computeGridScores(cl),
+        turnStartScores: zones.map(z => computePlayerScore(cl, z)),
+        // Keep peerSync-compatible fields for the 2-player online path
+        p1Hand: hands[0],
+        p2Hand: hands[1] || [],
+        rowTurn: true,
       };
     }
+  }
+
+  /** Return scoring zones from either player configs or auto-assignment. */
+  _getZones(numPlayers, players) {
+    if (players && players.length === numPlayers && players[0] && players[0].zone) {
+      return players.map(p => p.zone);
+    }
+    return assignScoringZones(numPlayers);
+  }
+
+  /** Default player configs when none provided. */
+  _defaultPlayers() {
+    return [
+      { type: 'human', name: 'P1', cpuLevel: 5, role: 'rows',
+        zone: { rows: Array.from({length: GRID_SIZE}, (_, i) => i), cols: [] } },
+      { type: 'cpu',   name: 'CPU', cpuLevel: 5, role: 'cols',
+        zone: { rows: [], cols: Array.from({length: GRID_SIZE}, (_, i) => i) } },
+    ];
   }
 
   componentDidMount() {
@@ -1137,38 +1300,36 @@ class CribbageGame extends React.Component {
         });
       });
     } else {
-      // Single-player: fire CPU if it is CPU's turn first
+      // Local game: fire CPU if it is CPU's turn first
       this._maybeTriggerCpu(this.state);
     }
   }
 
-  /** Returns true when it is the local player's turn (multiplayer only). */
+  /** Returns true when it is the local player's turn (online multiplayer only). */
   isMyTurn() {
     return this.props.isHost ? this.state.rowTurn : !this.state.rowTurn;
   }
 
   /** Current player's player config (from props.players). */
   currentPlayer() {
-    const idx = this.state.rowTurn ? 0 : 1;
-    const players = this.props.players || [
-      { type: 'human', name: 'P1', cpuLevel: 5, role: 'rows' },
-      { type: 'cpu',   name: 'CPU', cpuLevel: 5, role: 'cols' },
-    ];
-    return players[idx];
+    if (this.props.peerSync) {
+      const idx = this.state.rowTurn ? 0 : 1;
+      const players = this.props.players || this._defaultPlayers();
+      return players[idx];
+    }
+    const players = this.props.players || this._defaultPlayers();
+    return players[this.state.currentPlayerIndex];
   }
 
-  /** Fire CPU move if current player is CPU (single-player only). */
+  /** Fire CPU move if current player is CPU (local game only). */
   _maybeTriggerCpu(state) {
     if (this.props.peerSync) return;
-    const players = this.props.players || [
-      { type: 'human', name: 'P1', cpuLevel: 5, role: 'rows' },
-      { type: 'cpu',   name: 'CPU', cpuLevel: 5, role: 'cols' },
-    ];
-    const idx = state.rowTurn ? 0 : 1;
+    const players = this.props.players || this._defaultPlayers();
+    const idx = state.currentPlayerIndex;
     const player = players[idx];
-    const hand = state.rowTurn ? state.p1Hand : state.p2Hand;
+    const hand = state.hands && state.hands[idx];
     const hasValidCells = countValidPlacements(state.cardLayout) > 0;
-    if (player.type === 'cpu' && hasValidCells && hand && hand.length > 0) {
+    if (player && player.type === 'cpu' && hasValidCells && hand && hand.length > 0) {
       setTimeout(() => this.cpuMoveHandler(), 1200);
     }
   }
@@ -1182,35 +1343,51 @@ class CribbageGame extends React.Component {
     let cl = Array(CELLS).fill(null).map(() => ({ rank: null, suit: null }));
     cl[CENTER] = deck[0];
 
-    const { p1Hand, p2Hand, remainingDeck } = dealHands(deck.slice(1));
-
-    const newRowTurn = !(this.state.rowTurn);
-
-    const newState = {
-      deck: remainingDeck,
-      p1Hand,
-      p2Hand,
-      cardLayout: cl,
-      rowTurn: newRowTurn,
-      selectedHandIndex: null,
-      cardsPlacedThisTurn: 0,
-      placementError: null,
-      lastTurnInfo: null,
-      turnStartScores: computeGridScores(cl),
-    };
-
     if (this.props.peerSync) {
+      // Online 2-player reset
+      const { p1Hand, p2Hand, remainingDeck } = dealHands(deck.slice(1));
+      const newRowTurn = !this.state.rowTurn;
+      const newState = {
+        deck: remainingDeck,
+        p1Hand,
+        p2Hand,
+        cardLayout: cl,
+        rowTurn: newRowTurn,
+        selectedHandIndex: null,
+        cardsPlacedThisTurn: 0,
+        placementError: null,
+        lastTurnInfo: null,
+        turnStartScores: computeGridScores(cl),
+      };
       this.props.peerSync.state = newState;
       this.props.peerSync.sync();
+      this.setState(newState, () => { this._maybeTriggerCpu(newState); });
+    } else {
+      // Local N-player reset
+      const numPlayers = (this.props.players && this.props.players.length) || 2;
+      const zones = this._getZones(numPlayers, this.props.players);
+      const { hands, remainingDeck } = dealHandsMulti(deck.slice(1), numPlayers);
+      // Next round starts with the next player in rotation
+      const nextStart = (this.state.currentPlayerIndex + 1) % numPlayers;
+      const newState = {
+        deck: remainingDeck,
+        hands,
+        cardLayout: cl,
+        currentPlayerIndex: nextStart,
+        selectedHandIndex: null,
+        cardsPlacedThisTurn: 0,
+        placementError: null,
+        lastTurnInfo: null,
+        turnStartScores: zones.map(z => computePlayerScore(cl, z)),
+        p1Hand: hands[0],
+        p2Hand: hands[1] || [],
+        rowTurn: nextStart === 0,
+      };
+      this.setState(newState, () => { this._maybeTriggerCpu(newState); });
     }
-
-    this.setState(newState, () => {
-      this._maybeTriggerCpu(newState);
-    });
   }
 
   handleHandClick(index) {
-    // Toggle selection
     const newIndex = this.state.selectedHandIndex === index ? null : index;
     this.setState({ selectedHandIndex: newIndex });
   }
@@ -1218,23 +1395,65 @@ class CribbageGame extends React.Component {
   handleGridClick(i) {
     if (this.state.cardLayout[i].rank) return; // already filled
 
-    // Multiplayer: enforce turn
-    if (this.props.peerSync && !this.isMyTurn()) return;
+    if (this.props.peerSync) {
+      // Online multiplayer path (2-player)
+      if (!this.isMyTurn()) return;
 
-    // Single-player: only the human player can click during their turn
-    if (!this.props.peerSync) {
-      const player = this.currentPlayer();
-      if (player.type === 'cpu') return;
+      const { selectedHandIndex, rowTurn, cardLayout } = this.state;
+      if (selectedHandIndex === null) return;
+
+      const hand = rowTurn ? this.state.p1Hand : this.state.p2Hand;
+      const cardToPlace = hand[selectedHandIndex];
+      if (!cardToPlace || !cardToPlace.rank) return;
+
+      const row = Math.floor(i / GRID_SIZE);
+      const col = i % GRID_SIZE;
+      if (countCardsInRow(cardLayout, row) >= MAX_CARDS_PER_LINE) {
+        this.setState({ placementError: `Row ${row + 1} already has ${MAX_CARDS_PER_LINE} cards – choose a different row.` });
+        return;
+      }
+      if (countCardsInCol(cardLayout, col) >= MAX_CARDS_PER_LINE) {
+        this.setState({ placementError: `Column ${col + 1} already has ${MAX_CARDS_PER_LINE} cards – choose a different column.` });
+        return;
+      }
+
+      const newHand = hand.filter((_, idx) => idx !== selectedHandIndex);
+      let newDeck = this.state.deck.slice();
+      if (newDeck.length > 0) { newHand.push(newDeck[0]); newDeck = newDeck.slice(1); }
+
+      const newLayout = cardLayout.slice();
+      newLayout[i] = cardToPlace;
+
+      const newState = {
+        deck: newDeck,
+        p1Hand: rowTurn ? newHand : this.state.p1Hand,
+        p2Hand: rowTurn ? this.state.p2Hand : newHand,
+        cardLayout: newLayout,
+        rowTurn,
+        selectedHandIndex: null,
+        cardsPlacedThisTurn: this.state.cardsPlacedThisTurn + 1,
+        placementError: null,
+        lastTurnInfo: this.state.lastTurnInfo,
+        turnStartScores: this.state.turnStartScores,
+      };
+      this.props.peerSync.state = newState;
+      this.props.peerSync.sync();
+      this.setState(newState);
+      return;
     }
 
-    const { selectedHandIndex, rowTurn, cardLayout } = this.state;
-    if (selectedHandIndex === null) return; // no card selected
+    // Local N-player path
+    const { selectedHandIndex, currentPlayerIndex, cardLayout, hands } = this.state;
+    const players = this.props.players || this._defaultPlayers();
+    const player = players[currentPlayerIndex];
 
-    const hand = rowTurn ? this.state.p1Hand : this.state.p2Hand;
-    const cardToPlace = hand[selectedHandIndex];
+    if (player && player.type === 'cpu') return;
+    if (selectedHandIndex === null) return;
+
+    const hand = hands[currentPlayerIndex];
+    const cardToPlace = hand && hand[selectedHandIndex];
     if (!cardToPlace || !cardToPlace.rank) return;
 
-    // Enforce MAX_CARDS_PER_LINE limit for the target row and column
     const row = Math.floor(i / GRID_SIZE);
     const col = i % GRID_SIZE;
     if (countCardsInRow(cardLayout, row) >= MAX_CARDS_PER_LINE) {
@@ -1246,138 +1465,146 @@ class CribbageGame extends React.Component {
       return;
     }
 
-    // Remove card from hand, draw from deck if available
     const newHand = hand.filter((_, idx) => idx !== selectedHandIndex);
     let newDeck = this.state.deck.slice();
-    if (newDeck.length > 0) {
-      newHand.push(newDeck[0]);
-      newDeck = newDeck.slice(1);
-    }
+    if (newDeck.length > 0) { newHand.push(newDeck[0]); newDeck = newDeck.slice(1); }
 
     const newLayout = cardLayout.slice();
     newLayout[i] = cardToPlace;
-    // Turn does NOT switch automatically – player must click "End Turn"
 
-    const newState = {
+    const newHands = hands.map((h, idx) => idx === currentPlayerIndex ? newHand : h);
+
+    this.setState({
       deck: newDeck,
-      p1Hand: rowTurn ? newHand : this.state.p1Hand,
-      p2Hand: rowTurn ? this.state.p2Hand : newHand,
+      hands: newHands,
       cardLayout: newLayout,
-      rowTurn: rowTurn,
       selectedHandIndex: null,
       cardsPlacedThisTurn: this.state.cardsPlacedThisTurn + 1,
       placementError: null,
-      lastTurnInfo: this.state.lastTurnInfo,
-      turnStartScores: this.state.turnStartScores,
-    };
-
-    if (this.props.peerSync) {
-      this.props.peerSync.state = newState;
-      this.props.peerSync.sync();
-    }
-
-    this.setState(newState);
+      p1Hand: newHands[0],
+      p2Hand: newHands[1] || [],
+    });
   }
 
-  /** End the current player's turn and hand over to the opponent. */
+  /** End the current player's turn and advance to the next player. */
   handleEndTurn() {
-    // Multiplayer: only the active player can end the turn
-    if (this.props.peerSync && !this.isMyTurn()) return;
+    if (this.props.peerSync) {
+      // Online 2-player path
+      if (!this.isMyTurn()) return;
+      const { deck, p1Hand, p2Hand, cardLayout, rowTurn, cardsPlacedThisTurn, turnStartScores } = this.state;
+      const newRowTurn = !rowTurn;
+      const currentScores = computeGridScores(cardLayout);
+      const lastTurnInfo = {
+        wasRowTurn: rowTurn,
+        rowDelta: currentScores.rowTotal - turnStartScores.rowTotal,
+        colDelta: currentScores.colTotal - turnStartScores.colTotal,
+        cardsPlaced: cardsPlacedThisTurn,
+      };
+      const newState = {
+        deck, p1Hand, p2Hand, cardLayout,
+        rowTurn: newRowTurn,
+        selectedHandIndex: null,
+        cardsPlacedThisTurn: 0,
+        placementError: null,
+        lastTurnInfo,
+        turnStartScores: currentScores,
+      };
+      this.props.peerSync.state = newState;
+      this.props.peerSync.sync();
+      this.setState(newState, () => { this._maybeTriggerCpu(newState); });
+      return;
+    }
 
-    const { deck, p1Hand, p2Hand, cardLayout, rowTurn, cardsPlacedThisTurn, turnStartScores } = this.state;
-    const newRowTurn = !rowTurn;
+    // Local N-player path
+    const { hands, cardLayout, currentPlayerIndex, cardsPlacedThisTurn, turnStartScores } = this.state;
+    const players = this.props.players || this._defaultPlayers();
+    const numPlayers = players.length;
+    const newPlayerIndex = (currentPlayerIndex + 1) % numPlayers;
 
-    // Compute score delta for this turn
-    const currentScores = computeGridScores(cardLayout);
-    const rowDelta = currentScores.rowTotal - turnStartScores.rowTotal;
-    const colDelta = currentScores.colTotal - turnStartScores.colTotal;
+    const zones = this._getZones(numPlayers, players);
+    const newScores = zones.map(z => computePlayerScore(cardLayout, z));
+    const scoreDelta = newScores[currentPlayerIndex] - turnStartScores[currentPlayerIndex];
+
     const lastTurnInfo = {
-      wasRowTurn: rowTurn,
-      rowDelta,
-      colDelta,
+      playerIndex: currentPlayerIndex,
+      playerName: players[currentPlayerIndex].name,
+      playerRole: players[currentPlayerIndex].role,
+      scoreDelta,
       cardsPlaced: cardsPlacedThisTurn,
     };
 
     const newState = {
-      deck,
-      p1Hand,
-      p2Hand,
+      deck: this.state.deck,
+      hands,
       cardLayout,
-      rowTurn: newRowTurn,
+      currentPlayerIndex: newPlayerIndex,
       selectedHandIndex: null,
       cardsPlacedThisTurn: 0,
       placementError: null,
       lastTurnInfo,
-      turnStartScores: currentScores,
+      turnStartScores: newScores,
+      p1Hand: hands[0],
+      p2Hand: hands[1] || [],
+      rowTurn: newPlayerIndex === 0,
     };
 
-    if (this.props.peerSync) {
-      this.props.peerSync.state = newState;
-      this.props.peerSync.sync();
-    }
-
-    this.setState(newState, () => {
-      this._maybeTriggerCpu(newState);
-    });
+    this.setState(newState, () => { this._maybeTriggerCpu(newState); });
   }
 
   cpuMoveHandler() {
-    const { rowTurn, cardLayout, cardsPlacedThisTurn } = this.state;
-    const hand = rowTurn ? this.state.p1Hand : this.state.p2Hand;
-    const players = this.props.players || [
-      { type: 'human', name: 'P1', cpuLevel: 5, role: 'rows' },
-      { type: 'cpu',   name: 'CPU', cpuLevel: 5, role: 'cols' },
-    ];
-    const playerIdx = rowTurn ? 0 : 1;
-    const cpuLevel = players[playerIdx].cpuLevel || 5;
+    if (this.props.peerSync) return; // CPU not used in online multiplayer
 
-    // Compute valid cells once; CPU plays up to MAX_CARDS_PER_LINE cards per turn.
+    const { currentPlayerIndex, cardLayout, cardsPlacedThisTurn, hands } = this.state;
+    const players = this.props.players || this._defaultPlayers();
+    const player = players[currentPlayerIndex];
+    if (!player || player.type !== 'cpu') return;
+
+    const hand = hands[currentPlayerIndex];
+    const cpuLevel = player.cpuLevel || 5;
+    const numPlayers = players.length;
+
     const validCells = countValidPlacements(cardLayout);
     if (cardsPlacedThisTurn >= MAX_CARDS_PER_LINE || validCells === 0) {
       this.handleEndTurn();
       return;
     }
 
-    // getCpuHandMove already filters out cells violating the row/col limit
-    // (via getNextMoveRatings), so the returned move is always legal.
-    const move = getCpuHandMove(cardLayout, hand, cpuLevel);
+    // Use zone-aware CPU for all player counts
+    const zone = player.zone || this._getZones(numPlayers, players)[currentPlayerIndex];
+    const move = getCpuHandMoveForZone(cardLayout, hand, cpuLevel, zone);
     if (!move) {
-      // No valid move available; end the CPU's turn
       this.handleEndTurn();
       return;
     }
 
     const { handIndex, gridIndex } = move;
-
-    // Remove card from hand, draw from deck
     const newHand = hand.filter((_, idx) => idx !== handIndex);
     let newDeck = this.state.deck.slice();
-    if (newDeck.length > 0) {
-      newHand.push(newDeck[0]);
-      newDeck = newDeck.slice(1);
-    }
+    if (newDeck.length > 0) { newHand.push(newDeck[0]); newDeck = newDeck.slice(1); }
 
     const newLayout = cardLayout.slice();
     newLayout[gridIndex] = hand[handIndex];
     const newCardsPlaced = cardsPlacedThisTurn + 1;
-    // Compute valid cells for the updated layout to decide whether to continue.
     const nextValidCells = countValidPlacements(newLayout);
+
+    const newHands = hands.map((h, idx) => idx === currentPlayerIndex ? newHand : h);
 
     const newState = {
       deck: newDeck,
-      p1Hand: rowTurn ? newHand : this.state.p1Hand,
-      p2Hand: rowTurn ? this.state.p2Hand : newHand,
+      hands: newHands,
       cardLayout: newLayout,
-      rowTurn: rowTurn,
+      currentPlayerIndex,
       selectedHandIndex: null,
       cardsPlacedThisTurn: newCardsPlaced,
       placementError: null,
       lastTurnInfo: this.state.lastTurnInfo,
       turnStartScores: this.state.turnStartScores,
+      p1Hand: newHands[0],
+      p2Hand: newHands[1] || [],
+      rowTurn: currentPlayerIndex === 0,
     };
 
     this.setState(newState, () => {
-      // Continue placing cards or end turn
       const stillHasCards = newHand.length > 0;
       if (newCardsPlaced < MAX_CARDS_PER_LINE && stillHasCards && nextValidCells > 0) {
         setTimeout(() => this.cpuMoveHandler(), 800);
@@ -1388,210 +1615,217 @@ class CribbageGame extends React.Component {
   }
 
   render() {
-    const { cardLayout, rowTurn, p1Hand, p2Hand, selectedHandIndex, deck,
+    const { peerSync, players } = this.props;
+
+    if (peerSync) {
+      return this._renderOnlineMultiplayer();
+    }
+    return this._renderLocalGame(players || this._defaultPlayers());
+  }
+
+  _renderOnlineMultiplayer() {
+    const { cardLayout, p1Hand, p2Hand, selectedHandIndex, deck,
             cardsPlacedThisTurn, placementError, lastTurnInfo,
             p1Name: stateP1Name, p2Name: stateP2Name } = this.state;
-    const { peerSync, isHost, players } = this.props;
+    const { isHost } = this.props;
 
-    const p1Config = (players && players[0]) || { type: 'human', name: 'P1', role: 'rows' };
-    const p2Config = (players && players[1]) || { type: 'cpu', name: 'CPU', role: 'cols' };
-
-    // Names resolved from state (multiplayer) or player config (single-player)
-    const resolvedP1Name = peerSync ? (stateP1Name || 'Host') : p1Config.name;
-    const resolvedP2Name = peerSync ? (stateP2Name || 'Guest') : p2Config.name;
-
-    // Determine round-over: no valid placements remain (respects 5-card row/col limit)
+    const resolvedP1Name = stateP1Name || 'Host';
+    const resolvedP2Name = stateP2Name || 'Guest';
     const validCellsLeft = countValidPlacements(cardLayout);
     const roundOver = validCellsLeft === 0;
+    const myTurn = this.isMyTurn();
+    const myRole = isHost ? 'rows' : 'cols';
+    const myName = isHost ? resolvedP1Name : resolvedP2Name;
 
-    // Turn text
     let turnText;
     if (roundOver) {
-      if (peerSync) {
-        turnText = isHost
-          ? "Round Over – click deck to start next round"
-          : "Round Over – waiting for host to start next round";
-      } else {
-        turnText = "Round Over – click deck (astronaut) for next round";
-      }
-    } else if (peerSync) {
-      const myTurn = this.isMyTurn();
-      const myRole = isHost ? 'rows' : 'cols';
-      const myName = isHost ? resolvedP1Name : resolvedP2Name;
-      turnText = myTurn
-        ? `Your Turn – ${myName} (${myRole})`
-        : "Opponent's Turn";
+      turnText = isHost
+        ? "Round Over – click deck to start next round"
+        : "Round Over – waiting for host to start next round";
     } else {
-      const cp = rowTurn ? p1Config : p2Config;
-      const role = rowTurn ? 'rows' : 'cols';
-      turnText = cp.type === 'cpu'
-        ? `CPU's Turn (${role}) – ${cp.name}`
-        : `${cp.name}'s Turn (${role})`;
+      turnText = myTurn ? `Your Turn – ${myName} (${myRole})` : "Opponent's Turn";
     }
 
-    // The "next card" shown in top-left of grid is the first card of the current player's hand
-    // (or null to show the deck/reset button when round is over)
-    const currentHand = rowTurn ? p1Hand : p2Hand;
-    const nextCardForGrid = (!roundOver && currentHand && currentHand[0]) ? currentHand[0] : null;
-
-    // Grid click handler
-    const gridClickHandler = (i) => {
-      this.handleGridClick(i);
-    };
+    const isLocalHumanTurn = myTurn;
+    const selectedCardForGrid = isLocalHumanTurn && selectedHandIndex !== null
+      ? (isHost ? p1Hand[selectedHandIndex] : p2Hand[selectedHandIndex])
+      : null;
 
     const resetClickHandler = (r, c) => {
-      if (!peerSync || isHost) {
-        this.resetGame();
-        this.props.resetCallback(r, c);
-      }
+      if (isHost) { this.resetGame(); this.props.resetCallback([r, c]); }
     };
 
-    // Determine whether current human player needs to interact with their hand
-    const isLocalHumanTurn = !peerSync
-      ? (rowTurn ? p1Config.type === 'human' : p2Config.type === 'human')
-      : this.isMyTurn();
-
-    const selectedCardForGrid = isLocalHumanTurn && selectedHandIndex !== null
-      ? (rowTurn ? p1Hand[selectedHandIndex] : p2Hand[selectedHandIndex])
-      : null;
+    // 2-player zones for color coding
+    const zones = assignScoringZones(2);
 
     return (
       <div>
         <div aria-live="polite" aria-atomic="true" className="sr-only">{turnText}</div>
         <h3>{turnText}</h3>
-
-        {/* Identity label */}
-        {peerSync && (
-          <p style={{ color: '#555', fontSize: '14px', marginTop: 0 }}>
-            You are: <strong>
-              {isHost ? `${resolvedP1Name} (rows)` : `${resolvedP2Name} (cols)`}
-            </strong>
-          </p>
-        )}
-
+        <p style={{ color: '#555', fontSize: '14px', marginTop: 0 }}>
+          You are: <strong>{isHost ? `${resolvedP1Name} (rows)` : `${resolvedP2Name} (cols)`}</strong>
+        </p>
         <br/>
         <CardGrid
-          nextCard={roundOver ? null : nextCardForGrid}
+          nextCard={roundOver ? null : (isHost ? (p1Hand[0] || null) : (p2Hand[0] || null))}
           cardLayout={cardLayout}
-          clickHandler={gridClickHandler}
+          clickHandler={(i) => this.handleGridClick(i)}
           resetCallback={resetClickHandler}
           selectedHandCard={selectedCardForGrid}
+          zones={zones}
         />
         <br />
-
-        {/* Last-turn score summary */}
         {lastTurnInfo && (
-          <div
-            role="status"
-            aria-live="polite"
-            style={{
-              display: 'inline-block',
-              margin: '8px 0 12px',
-              padding: '10px 16px',
-              borderRadius: '6px',
-              backgroundColor: '#e8f5e9',
-              border: '1px solid #a5d6a7',
-              fontSize: '14px',
-              lineHeight: '1.6',
-            }}
-          >
+          <div role="status" aria-live="polite" style={lastTurnStyle}>
             <strong>
-              Last turn –{' '}
-              {lastTurnInfo.wasRowTurn ? resolvedP1Name : resolvedP2Name}
+              Last turn – {lastTurnInfo.wasRowTurn ? resolvedP1Name : resolvedP2Name}
               {' '}({lastTurnInfo.wasRowTurn ? 'rows' : 'cols'}):
             </strong>{' '}
             placed {lastTurnInfo.cardsPlaced} card{lastTurnInfo.cardsPlaced !== 1 ? 's' : ''}
-            {' · '}
-            Row pts: <strong>{lastTurnInfo.rowDelta > 0 ? `+${lastTurnInfo.rowDelta}` : lastTurnInfo.rowDelta}</strong>
-            {' · '}
-            Col pts: <strong>{lastTurnInfo.colDelta > 0 ? `+${lastTurnInfo.colDelta}` : lastTurnInfo.colDelta}</strong>
+            {' · '}Row pts: <strong>{lastTurnInfo.rowDelta > 0 ? `+${lastTurnInfo.rowDelta}` : lastTurnInfo.rowDelta}</strong>
+            {' · '}Col pts: <strong>{lastTurnInfo.colDelta > 0 ? `+${lastTurnInfo.colDelta}` : lastTurnInfo.colDelta}</strong>
           </div>
         )}
-
-        {/* Hand displays */}
-        {!peerSync && (
-          <div>
-            {/* P1 hand */}
-            <HandDisplay
-              hand={p1Hand}
-              selectedIndex={rowTurn && isLocalHumanTurn ? selectedHandIndex : null}
-              onCardClick={(i) => this.handleHandClick(i)}
-              label={`${resolvedP1Name}'s Hand (rows)`}
-              faceDown={p1Config.type === 'cpu'}
-              isActive={rowTurn && p1Config.type === 'human' && !roundOver}
-            />
-            {/* P2 hand */}
-            <HandDisplay
-              hand={p2Hand}
-              selectedIndex={!rowTurn && isLocalHumanTurn ? selectedHandIndex : null}
-              onCardClick={(i) => this.handleHandClick(i)}
-              label={`${resolvedP2Name}'s Hand (cols)`}
-              faceDown={p2Config.type === 'cpu'}
-              isActive={!rowTurn && p2Config.type === 'human' && !roundOver}
-            />
-          </div>
-        )}
-
-        {peerSync && (
-          <div>
-            {/* Show your own hand face-up */}
-            <HandDisplay
-              hand={isHost ? p1Hand : p2Hand}
-              selectedIndex={isLocalHumanTurn ? selectedHandIndex : null}
-              onCardClick={(i) => this.handleHandClick(i)}
-              label={`Your Hand – ${isHost ? resolvedP1Name : resolvedP2Name} (${isHost ? 'rows' : 'cols'})`}
-              faceDown={false}
-              isActive={isLocalHumanTurn && !roundOver}
-            />
-            {/* Show opponent's hand face-down */}
-            <HandDisplay
-              hand={isHost ? p2Hand : p1Hand}
-              selectedIndex={null}
-              onCardClick={() => {}}
-              label={`Opponent's Hand – ${isHost ? resolvedP2Name : resolvedP1Name} (${isHost ? 'cols' : 'rows'})`}
-              faceDown={true}
-              isActive={false}
-            />
-          </div>
-        )}
-
-        {/* Deck size info */}
-        <p style={{ fontSize: '12px', color: '#888' }}>
-          Cards remaining in deck: {deck.length}
-        </p>
-
-        {/* End Turn button – visible during a human player's turn */}
-        {!roundOver && isLocalHumanTurn && (
-          <div style={{ margin: '12px 0' }}>
-            <button
-              onClick={() => this.handleEndTurn()}
-              aria-label="End your turn and pass play to the other player"
-              style={{
-                padding: '10px 28px',
-                fontSize: '16px',
-                cursor: 'pointer',
-                borderRadius: '6px',
-                border: 'none',
-                backgroundColor: '#388e3c',
-                color: '#fff',
-                fontWeight: 'bold',
-              }}
-            >
-              End Turn {cardsPlacedThisTurn > 0 ? `(${cardsPlacedThisTurn} card${cardsPlacedThisTurn !== 1 ? 's' : ''} placed)` : ''}
-            </button>
-            {cardsPlacedThisTurn === 0 && (
-              <span style={{ marginLeft: '10px', fontSize: '13px', color: '#777' }}>
-                Place at least one card before ending your turn.
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Placement error message */}
+        <div>
+          <HandDisplay
+            hand={isHost ? p1Hand : p2Hand}
+            selectedIndex={isLocalHumanTurn ? selectedHandIndex : null}
+            onCardClick={(i) => this.handleHandClick(i)}
+            label={`Your Hand – ${isHost ? resolvedP1Name : resolvedP2Name} (${isHost ? 'rows' : 'cols'})`}
+            faceDown={false}
+            isActive={isLocalHumanTurn && !roundOver}
+          />
+          <HandDisplay
+            hand={isHost ? p2Hand : p1Hand}
+            selectedIndex={null}
+            onCardClick={() => {}}
+            label={`Opponent's Hand – ${isHost ? resolvedP2Name : resolvedP1Name} (${isHost ? 'cols' : 'rows'})`}
+            faceDown={true}
+            isActive={false}
+          />
+        </div>
+        <p style={{ fontSize: '12px', color: '#888' }}>Cards remaining in deck: {deck.length}</p>
+        {!roundOver && isLocalHumanTurn && this._renderEndTurnButton(cardsPlacedThisTurn)}
         {placementError && (
           <p role="alert" style={{ color: '#c62828', fontSize: '14px', margin: '6px 0' }}>
             ⚠ {placementError}
           </p>
+        )}
+      </div>
+    );
+  }
+
+  _renderLocalGame(players) {
+    const { cardLayout, currentPlayerIndex, hands, selectedHandIndex, deck,
+            cardsPlacedThisTurn, placementError, lastTurnInfo } = this.state;
+    const numPlayers = players.length;
+    const currentPlayer = players[currentPlayerIndex];
+    const zones = this._getZones(numPlayers, players);
+
+    const validCellsLeft = countValidPlacements(cardLayout);
+    const roundOver = validCellsLeft === 0;
+
+    const isHumanTurn = currentPlayer && currentPlayer.type === 'human';
+
+    let turnText;
+    if (roundOver) {
+      turnText = "Round Over – click deck (astronaut) for next round";
+    } else {
+      const role = currentPlayer ? currentPlayer.role : '';
+      turnText = currentPlayer && currentPlayer.type === 'cpu'
+        ? `CPU's Turn (${role}) – ${currentPlayer.name}`
+        : `${currentPlayer ? currentPlayer.name : 'Player'}'s Turn (${role})`;
+    }
+
+    const currentHand = hands && hands[currentPlayerIndex];
+    const nextCardForGrid = (!roundOver && currentHand && currentHand[0]) ? currentHand[0] : null;
+
+    const selectedCardForGrid = isHumanTurn && selectedHandIndex !== null
+      ? (currentHand && currentHand[selectedHandIndex])
+      : null;
+
+    const playerColor = PLAYER_COLORS[currentPlayerIndex % PLAYER_COLORS.length];
+
+    const resetClickHandler = (r, c) => {
+      // Compute per-player scores from the final grid state
+      const finalScores = zones.map(z => computePlayerScore(cardLayout, z));
+      this.resetGame();
+      this.props.resetCallback(finalScores);
+    };
+
+    return (
+      <div>
+        <div aria-live="polite" aria-atomic="true" className="sr-only">{turnText}</div>
+        <h3 style={{ color: playerColor }}>{turnText}</h3>
+        <br/>
+        <CardGrid
+          nextCard={roundOver ? null : nextCardForGrid}
+          cardLayout={cardLayout}
+          clickHandler={(i) => this.handleGridClick(i)}
+          resetCallback={resetClickHandler}
+          selectedHandCard={selectedCardForGrid}
+          zones={zones}
+        />
+        <br />
+        {lastTurnInfo && (
+          <div role="status" aria-live="polite" style={lastTurnStyle}>
+            <strong>
+              Last turn – {lastTurnInfo.playerName} ({lastTurnInfo.playerRole}):
+            </strong>{' '}
+            placed {lastTurnInfo.cardsPlaced} card{lastTurnInfo.cardsPlaced !== 1 ? 's' : ''}
+            {lastTurnInfo.scoreDelta !== 0 && (
+              <>{' · '}Score: <strong>{lastTurnInfo.scoreDelta > 0 ? `+${lastTurnInfo.scoreDelta}` : lastTurnInfo.scoreDelta}</strong></>
+            )}
+          </div>
+        )}
+        {/* Hand displays for all local players */}
+        <div>
+          {players.map((player, idx) => {
+            const hand = hands && hands[idx];
+            const isTurnPlayer = idx === currentPlayerIndex;
+            const color = PLAYER_COLORS[idx % PLAYER_COLORS.length];
+            return (
+              <HandDisplay
+                key={idx}
+                hand={hand}
+                selectedIndex={isTurnPlayer && isHumanTurn ? selectedHandIndex : null}
+                onCardClick={(i) => this.handleHandClick(i)}
+                label={<span style={{ color }}>{player.name}'s Hand ({player.role})</span>}
+                faceDown={player.type === 'cpu'}
+                isActive={isTurnPlayer && player.type === 'human' && !roundOver}
+              />
+            );
+          })}
+        </div>
+        <p style={{ fontSize: '12px', color: '#888' }}>Cards remaining in deck: {deck.length}</p>
+        {!roundOver && isHumanTurn && this._renderEndTurnButton(cardsPlacedThisTurn)}
+        {placementError && (
+          <p role="alert" style={{ color: '#c62828', fontSize: '14px', margin: '6px 0' }}>
+            ⚠ {placementError}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  _renderEndTurnButton(cardsPlacedThisTurn) {
+    return (
+      <div style={{ margin: '12px 0' }}>
+        <button
+          onClick={() => this.handleEndTurn()}
+          aria-label="End your turn and pass play to the next player"
+          style={{
+            padding: '10px 28px', fontSize: '16px', cursor: 'pointer',
+            borderRadius: '6px', border: 'none',
+            backgroundColor: '#388e3c', color: '#fff', fontWeight: 'bold',
+          }}
+        >
+          End Turn {cardsPlacedThisTurn > 0 ? `(${cardsPlacedThisTurn} card${cardsPlacedThisTurn !== 1 ? 's' : ''} placed)` : ''}
+        </button>
+        {cardsPlacedThisTurn === 0 && (
+          <span style={{ marginLeft: '10px', fontSize: '13px', color: '#777' }}>
+            Place at least one card before ending your turn.
+          </span>
         )}
       </div>
     );
@@ -1607,8 +1841,11 @@ class MultiRoundCribbageGame extends React.Component {
     super(props);
     const autoJoinId = getAutoJoinId();
     this.state = {
+      // Online multiplayer (peerSync) uses rowScoreboard / colScoreboard
       rowScoreboard: 0,
       colScoreboard: 0,
+      // Local N-player games use playerScoreboards (array indexed by player slot)
+      playerScoreboards: [],
       showMultiplayerLobby: !!autoJoinId,
       autoJoinId,
       peerSync: null,
@@ -1630,6 +1867,7 @@ class MultiRoundCribbageGame extends React.Component {
       localName,
       rowScoreboard: 0,
       colScoreboard: 0,
+      playerScoreboards: [],
       players: null,
     });
   }
@@ -1645,49 +1883,96 @@ class MultiRoundCribbageGame extends React.Component {
       localName: '',
       rowScoreboard: 0,
       colScoreboard: 0,
+      playerScoreboards: [],
       players: null,
       gameKey: this.state.gameKey + 1,
     });
   }
 
   handleSetupStart(players, gameMode) {
-    this.setState({ players, gameMode: gameMode || 'cribbage', gameKey: this.state.gameKey + 1 });
+    this.setState({
+      players,
+      gameMode: gameMode || 'cribbage',
+      playerScoreboards: new Array(players.length).fill(0),
+      gameKey: this.state.gameKey + 1,
+    });
   }
 
-  updateScore(rScore, cScore) {
-    const { players, multiplayerInitialState } = this.state;
-    const p1Name = players
-      ? players[0].name
-      : (multiplayerInitialState
-          ? (multiplayerInitialState.p1Name || 'Host')
-          : 'P1');
-    const p2Name = players
-      ? players[1].name
-      : (multiplayerInitialState
-          ? (multiplayerInitialState.p2Name || 'Guest')
-          : 'P2/CPU');
+  /**
+   * Called when a round ends.
+   * @param {number[]|number} scoreOrArray  Array of per-player scores (local game)
+   *                                        or raw rowScore for online (legacy 2-arg path).
+   * @param {number} [colScore]             Column score (online game / Runwabble legacy).
+   */
+  updateScore(scoreOrArray, colScore) {
+    const { players, peerSync, multiplayerInitialState } = this.state;
 
-    let msg;
-    if (rScore > cScore) {
-      rScore = rScore - cScore;
-      cScore = 0;
-      msg = `${p1Name} (rows) wins: ${rScore} points`;
-    }
-    else if (cScore > rScore) {
-      cScore = cScore - rScore;
-      rScore = 0;
-      msg = `${p2Name} (cols) wins: ${cScore} points`;
-    }
-    else {
-      msg = "Tie!";
-      cScore = 0;
-      rScore = 0;
+    // Online multiplayer (peerSync) – legacy 2-arg path
+    if (peerSync || typeof scoreOrArray === 'number') {
+      const rScore = Array.isArray(scoreOrArray) ? scoreOrArray[0] : scoreOrArray;
+      const cScore = Array.isArray(scoreOrArray) ? (scoreOrArray[1] || 0) : (colScore || 0);
+      const p1Name = multiplayerInitialState
+        ? (this.state.isHost
+            ? (multiplayerInitialState.p1Name || 'Host')
+            : (multiplayerInitialState.p2Name || 'Guest'))
+        : 'P1';
+      const p2Name = multiplayerInitialState
+        ? (this.state.isHost
+            ? (multiplayerInitialState.p2Name || 'Guest')
+            : (multiplayerInitialState.p1Name || 'Host'))
+        : 'P2/CPU';
+
+      let winMsg;
+      let newR = rScore, newC = cScore;
+      if (rScore > cScore) {
+        newR = rScore - cScore; newC = 0;
+        winMsg = `${p1Name} (rows) wins: ${newR} points`;
+      } else if (cScore > rScore) {
+        newC = cScore - rScore; newR = 0;
+        winMsg = `${p2Name} (cols) wins: ${newC} points`;
+      } else {
+        winMsg = 'Tie!'; newR = 0; newC = 0;
+      }
+      alert(winMsg);
+      this.setState({
+        rowScoreboard: this.state.rowScoreboard + newR,
+        colScoreboard: this.state.colScoreboard + newC,
+      });
+      return;
     }
 
-    alert(msg);
+    // Local N-player game – scoreOrArray is an array of per-player scores
+    const scores = Array.isArray(scoreOrArray) ? scoreOrArray : [scoreOrArray, colScore || 0];
+    const numPlayers = players ? players.length : scores.length;
+
+    // Find winner(s) – subtract the highest score of other players (same as 2-player logic generalised)
+    const maxScore = Math.max(...scores);
+    const winners = scores.reduce((acc, s, i) => s === maxScore ? [...acc, i] : acc, []);
+
+    let winMsg;
+    if (winners.length === 1) {
+      const wi = winners[0];
+      const pName = players ? players[wi].name : `Player ${wi + 1}`;
+      const pRole = players ? players[wi].role : '';
+      winMsg = `${pName} (${pRole}) wins with ${maxScore} points!`;
+    } else {
+      const names = winners.map(wi => players ? players[wi].name : `Player ${wi + 1}`).join(' & ');
+      winMsg = `Tie between ${names} (${maxScore} pts each)!`;
+    }
+    alert(winMsg);
+
+    // Round points: winner earns (their score - next highest score); others earn 0
+    const sortedScores = [...scores].sort((a, b) => b - a);
+    const secondHighest = sortedScores[1] || 0;
+    const roundPoints = scores.map((s, i) =>
+      s === maxScore && winners.length === 1 ? s - secondHighest : 0
+    );
+
+    const prev = this.state.playerScoreboards.length === numPlayers
+      ? this.state.playerScoreboards
+      : new Array(numPlayers).fill(0);
     this.setState({
-      rowScoreboard: this.state.rowScoreboard + rScore,
-      colScoreboard: this.state.colScoreboard + cScore,
+      playerScoreboards: prev.map((p, i) => p + (roundPoints[i] || 0)),
     });
   }
 
@@ -1701,14 +1986,16 @@ class MultiRoundCribbageGame extends React.Component {
           ? (multiplayerInitialState && multiplayerInitialState.p1Name) || 'Host'
           : (multiplayerInitialState && multiplayerInitialState.p2Name) || 'Guest')
       : 'P1');
-    const p2Name = players ? players[1].name : (peerSync
+    const p2Name = players ? players[1] && players[1].name : (peerSync
       ? (isHost
           ? (multiplayerInitialState && multiplayerInitialState.p2Name) || 'Guest'
           : (multiplayerInitialState && multiplayerInitialState.p1Name) || 'Host')
       : 'P2/CPU');
 
     const isRunwabble = gameMode === 'runwabble' && !peerSync;
+    const numPlayers = players ? players.length : 2;
 
+    // Score display strings
     const rowScoreString = peerSync
       ? `${isHost ? 'Your' : "Opponent's"} Score (Rows – ${p1Name}): ${this.state.rowScoreboard}`
       : isRunwabble
@@ -1727,10 +2014,19 @@ class MultiRoundCribbageGame extends React.Component {
     } else if (players) {
       const humanCount = players.filter(p => p.type === 'human').length;
       const modeLabel = isRunwabble ? 'Runwabble' : 'Cribbage Grid';
-      if (humanCount === 2) gameTypeLabel = `${modeLabel} – 2-player game (local)`;
-      else if (humanCount === 1) gameTypeLabel = `${modeLabel} – 1-player game (vs CPU)`;
-      else gameTypeLabel = `${modeLabel} – CPU vs CPU`;
+      if (numPlayers > 2) {
+        gameTypeLabel = `${modeLabel} – ${numPlayers}-player game`;
+      } else if (humanCount === 2) {
+        gameTypeLabel = `${modeLabel} – 2-player game (local)`;
+      } else if (humanCount === 1) {
+        gameTypeLabel = `${modeLabel} – 1-player game (vs CPU)`;
+      } else {
+        gameTypeLabel = `${modeLabel} – CPU vs CPU`;
+      }
     }
+
+    // Scoreboard for local N-player games
+    const localScoreboards = players && !isRunwabble && numPlayers > 0 && this.state.playerScoreboards;
 
     return (
       <>
@@ -1751,13 +2047,28 @@ class MultiRoundCribbageGame extends React.Component {
             />
           )}
 
-          {/* Game setup screen (single-player only, shown before first game or after reset) */}
+          {/* Game setup screen (local game only, shown before first game or after reset) */}
           {!peerSync && !players && !showMultiplayerLobby && (
             <GameSetupScreen onStart={(p, mode) => this.handleSetupStart(p, mode)} />
           )}
 
-          {!isRunwabble && <h2>{rowScoreString}</h2>}
-          {!isRunwabble && <h2>{colScoreString}</h2>}
+          {/* Scoreboard */}
+          {peerSync && !isRunwabble && <h2>{rowScoreString}</h2>}
+          {peerSync && !isRunwabble && <h2>{colScoreString}</h2>}
+          {!peerSync && !isRunwabble && localScoreboards && localScoreboards.length > 0 && (
+            <div style={{ marginBottom: '8px' }}>
+              {players.map((p, i) => {
+                const color = PLAYER_COLORS[i % PLAYER_COLORS.length];
+                return (
+                  <h2 key={i} style={{ margin: '4px 0', color }}>
+                    {p.name} ({p.role}): {localScoreboards[i] || 0} pts
+                  </h2>
+                );
+              })}
+            </div>
+          )}
+          {isRunwabble && !peerSync && <h2>{rowScoreString}</h2>}
+          {isRunwabble && !peerSync && <h2>{colScoreString}</h2>}
 
           {!peerSync && !isRunwabble && (
             <button
@@ -1801,7 +2112,7 @@ class MultiRoundCribbageGame extends React.Component {
             />
           )}
 
-          {/* Only render Cribbage game when setup is done (single-player) or in multiplayer */}
+          {/* Only render Cribbage game when setup is done (local) or in online multiplayer */}
           {(players || peerSync) && !isRunwabble && (
             <CribbageGame
               key={`game-${peerSync ? 'multiplayer' : 'singleplayer'}-${gameKey}`}
@@ -1809,7 +2120,7 @@ class MultiRoundCribbageGame extends React.Component {
               isHost={isHost}
               initialGameState={multiplayerInitialState}
               players={players}
-              resetCallback={(r, c) => this.updateScore(r, c)}
+              resetCallback={(scores) => this.updateScore(scores)}
             />
           )}
         </main>
@@ -2041,52 +2352,6 @@ function getColRating(array2d, colInd) {
   return getCardRatings(col);
 }
 
-function getNextMoveRatings(cardLayout, nextCard) {
-
-  let array2d = convertLayoutToGrid(cardLayout);
-
-  let openIndices = [];
-  let netRatings = [];
-
-  for (let row = 0 ; row < GRID_SIZE ; row++) {
-    // Skip rows that already have MAX_CARDS_PER_LINE cards
-    let rowCount = 0;
-    for (let c = 0; c < GRID_SIZE; c++) {
-      if (array2d[row][c].rank) rowCount++;
-    }
-    if (rowCount >= MAX_CARDS_PER_LINE) continue;
-
-    for (let col = 0 ; col < GRID_SIZE ; col ++) {
-      if (array2d[row][col].rank) {
-        continue;
-      }
-
-      // Skip columns that already have MAX_CARDS_PER_LINE cards
-      let colCount = 0;
-      for (let r = 0; r < GRID_SIZE; r++) {
-        if (array2d[r][col].rank) colCount++;
-      }
-      if (colCount >= MAX_CARDS_PER_LINE) continue;
-
-      let baselineRowRating = getRowRating(array2d, row);
-      let baselineColRating = getColRating(array2d, col);
-
-      array2d[row][col] = nextCard;
-
-      let newRowRating = getRowRating(array2d, row);
-      let newColRating = getColRating(array2d, col);
-      
-      array2d[row][col] = {rank: null, suit: null};
-
-      let scoreDiff = (newColRating - newRowRating) - (baselineColRating - baselineRowRating);
-      
-      openIndices.push(row * GRID_SIZE + col);
-      netRatings.push(scoreDiff);
-    }
-  }
-  return [openIndices, netRatings];
-}
-
 /** Weighted soft max of values, multiply by alpha first. */
 function softmax(values, alpha) {
   let ans = values.map((x) => Math.exp(x*alpha));
@@ -2108,18 +2373,70 @@ function pickIndex(values) {
   return values.length - 1;
 }
 
+// =========================================================
+// Zone-aware CPU helpers (used for 2–4 player local games)
+// =========================================================
+
 /**
- * Choose the best (handIndex, gridIndex) for the CPU from its hand.
- * Returns {handIndex, gridIndex} or null if no move available.
+ * Like getNextMoveRatings but evaluates moves purely within the given scoring zone.
+ * The CPU tries to maximise its own zone's score improvement.
+ * @param {object} zone  { rows: number[], cols: number[] }
  */
-function getCpuHandMove(cardLayout, hand, cpuLevel) {
+function getNextMoveRatingsForZone(cardLayout, nextCard, zone) {
+  const array2d = convertLayoutToGrid(cardLayout);
+  const openIndices = [];
+  const netRatings = [];
+
+  for (let row = 0; row < GRID_SIZE; row++) {
+    let rowCount = 0;
+    for (let c = 0; c < GRID_SIZE; c++) {
+      if (array2d[row][c].rank) rowCount++;
+    }
+    if (rowCount >= MAX_CARDS_PER_LINE) continue;
+
+    for (let col = 0; col < GRID_SIZE; col++) {
+      if (array2d[row][col].rank) continue;
+
+      let colCount = 0;
+      for (let r = 0; r < GRID_SIZE; r++) {
+        if (array2d[r][col].rank) colCount++;
+      }
+      if (colCount >= MAX_CARDS_PER_LINE) continue;
+
+      const ownsRow = zone.rows.includes(row);
+      const ownsCol = zone.cols.includes(col);
+
+      let baselineScore = 0;
+      if (ownsRow) baselineScore += getRowRating(array2d, row);
+      if (ownsCol) baselineScore += getColRating(array2d, col);
+
+      array2d[row][col] = nextCard;
+
+      let newScore = 0;
+      if (ownsRow) newScore += getRowRating(array2d, row);
+      if (ownsCol) newScore += getColRating(array2d, col);
+
+      array2d[row][col] = { rank: null, suit: null };
+
+      openIndices.push(row * GRID_SIZE + col);
+      netRatings.push(newScore - baselineScore);
+    }
+  }
+  return [openIndices, netRatings];
+}
+
+/**
+ * Zone-aware version of getCpuHandMove.
+ * The CPU maximises score gains within its own assigned rows / cols.
+ * Returns {handIndex, gridIndex} or null if no move is available.
+ */
+function getCpuHandMoveForZone(cardLayout, hand, cpuLevel, zone) {
   if (!hand || hand.length === 0) return null;
 
   let allChoices = [];
-
   hand.forEach((card, hIdx) => {
     if (!card || !card.rank) return;
-    const [openIndices, netRatings] = getNextMoveRatings(cardLayout, card);
+    const [openIndices, netRatings] = getNextMoveRatingsForZone(cardLayout, card, zone);
     openIndices.forEach((gridIdx, i) => {
       allChoices.push({ handIndex: hIdx, gridIndex: gridIdx, rating: netRatings[i] });
     });
