@@ -660,6 +660,9 @@ function isRedSuit(suit) {
   return suit === 'hearts' || suit === 'diamonds';
 }
 
+const CARD_RED_COLOR = '#c62828';
+const CARD_BLACK_COLOR = '#212121';
+
 function cardDescription(rank, suit, showBack) {
   if (showBack) return 'Face-down card';
   if (rank && suit) {
@@ -677,7 +680,7 @@ function Card({ rank, suit, showBack, clickHandler, 'aria-label': ariaLabel, sel
     ? { outline: '3px solid #f57c00', outlineOffset: '2px', borderRadius: '4px' }
     : {};
 
-  const textColor = (rank && suit) ? (isRedSuit(suit) ? '#c62828' : '#212121') : '#bbb';
+  const textColor = (rank && suit) ? (isRedSuit(suit) ? CARD_RED_COLOR : CARD_BLACK_COLOR) : '#bbb';
 
   let cardInner;
   if (showBack) {
@@ -1804,8 +1807,8 @@ function scoreColor(hand) {
   if (hand.length < 5) return 0;
   const realCards = hand.filter(c => c.suit);
   if (realCards.length < 5) return 0;
-  const allRed = realCards.every(c => c.suit === 'hearts' || c.suit === 'diamonds');
-  const allBlack = realCards.every(c => c.suit === 'clubs' || c.suit === 'spades');
+  const allRed = realCards.every(c => isRedSuit(c.suit));
+  const allBlack = realCards.every(c => !isRedSuit(c.suit));
   return (allRed || allBlack) ? 2 : 0;
 }
 
@@ -2317,7 +2320,7 @@ function RunwabbleBoard({ board, selectedCells, onCellClick }) {
       if (tile) {
         const displayRank = rwEffectiveRank(tile);
         const desc = cardDescription(displayRank, tile.suit, false);
-        const tileColor = isRedSuit(tile.suit) ? '#c62828' : '#212121';
+        const tileColor = isRedSuit(tile.suit) ? CARD_RED_COLOR : CARD_BLACK_COLOR;
         cells.push(
           <td key={`c-${c}`} style={{ padding: 0 }}>
             <div style={{ ...cellBaseStyle, color: tileColor, fontWeight: 'bold', fontFamily: 'Georgia, serif', flexDirection: 'column', position: 'relative' }} aria-label={`Row ${r + 1} Col ${c + 1}: ${desc}`}>
