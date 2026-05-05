@@ -1,20 +1,20 @@
 {
   "files": {
-    "main.css": "/cribbage-grid/static/css/main.343734f3.chunk.css",
-    "main.js": "/cribbage-grid/static/js/main.236129b0.chunk.js",
-    "main.js.map": "/cribbage-grid/static/js/main.236129b0.chunk.js.map",
+    "main.css": "/cribbage-grid/static/css/main.c99b3f2d.chunk.css",
+    "main.js": "/cribbage-grid/static/js/main.d87f1cd4.chunk.js",
+    "main.js.map": "/cribbage-grid/static/js/main.d87f1cd4.chunk.js.map",
     "runtime-main.js": "/cribbage-grid/static/js/runtime-main.10ba6e07.js",
     "runtime-main.js.map": "/cribbage-grid/static/js/runtime-main.10ba6e07.js.map",
     "static/js/2.e4ebbf2a.chunk.js": "/cribbage-grid/static/js/2.e4ebbf2a.chunk.js",
     "static/js/2.e4ebbf2a.chunk.js.map": "/cribbage-grid/static/js/2.e4ebbf2a.chunk.js.map",
     "index.html": "/cribbage-grid/index.html",
-    "static/css/main.343734f3.chunk.css.map": "/cribbage-grid/static/css/main.343734f3.chunk.css.map",
+    "static/css/main.c99b3f2d.chunk.css.map": "/cribbage-grid/static/css/main.c99b3f2d.chunk.css.map",
     "static/js/2.e4ebbf2a.chunk.js.LICENSE.txt": "/cribbage-grid/static/js/2.e4ebbf2a.chunk.js.LICENSE.txt"
   },
   "entrypoints": [
     "static/js/runtime-main.10ba6e07.js",
     "static/js/2.e4ebbf2a.chunk.js",
-    "static/css/main.343734f3.chunk.css",
-    "static/js/main.236129b0.chunk.js"
+    "static/css/main.c99b3f2d.chunk.css",
+    "static/js/main.d87f1cd4.chunk.js"
   ]
 }
