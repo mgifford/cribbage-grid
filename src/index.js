@@ -743,9 +743,6 @@ function isRedSuit(suit) {
   return suit === 'hearts' || suit === 'diamonds';
 }
 
-const CARD_RED_COLOR = '#c62828';
-const CARD_BLACK_COLOR = '#212121';
-
 function cardDescription(rank, suit, showBack) {
   if (showBack) return 'Face-down card';
   if (rank && suit) {
@@ -3103,7 +3100,7 @@ function rwHandDeductionValue(hand) {
 // =========================================================
 
 function RunwabbleBoard({ board, selectedCells, onCellClick }) {
-  const tileSize = 36;
+  const tileSize = 40;
   const headerCells = [
     <th key="corner" scope="col" style={{ width: 22 }}></th>,
   ];
@@ -3137,8 +3134,8 @@ function RunwabbleBoard({ board, selectedCells, onCellClick }) {
 
       const cellBaseStyle = {
         width: tileSize,
-        height: tileSize + 8,
-        border: '1px solid var(--card-empty-border)',
+        height: tileSize,
+        border: '1px dashed var(--card-empty-border)',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -3151,12 +3148,48 @@ function RunwabbleBoard({ board, selectedCells, onCellClick }) {
       if (tile) {
         const displayRank = rwEffectiveRank(tile);
         const desc = cardDescription(displayRank, tile.suit, false);
-        const tileColor = isRedSuit(tile.suit) ? CARD_RED_COLOR : CARD_BLACK_COLOR;
+        const tileColor = isRedSuit(tile.suit) ? 'var(--card-red)' : 'var(--card-black)';
         cells.push(
           <td key={`c-${c}`} style={{ padding: 0 }}>
-            <div style={{ ...cellBaseStyle, color: tileColor, fontWeight: 'bold', fontFamily: 'Georgia, serif', flexDirection: 'column', position: 'relative' }} aria-label={`Row ${r + 1} Col ${c + 1}: ${desc}`}>
-              <span style={{ fontSize: '9px', lineHeight: 1 }} aria-hidden="true">{rankDisplay(displayRank)}</span>
-              <span style={{ fontSize: '14px', lineHeight: 1 }} aria-hidden="true">{suitSymbol(tile.suit)}</span>
+            <div
+              role="img"
+              className="card-tile"
+              style={{
+                ...cellBaseStyle,
+                backgroundColor: 'var(--card-bg)',
+                border: '1px solid var(--card-border)',
+                color: tileColor,
+                fontFamily: 'Georgia, serif',
+                boxShadow: '0 2px 6px var(--card-shadow)',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+              aria-label={`Row ${r + 1} Col ${c + 1}: ${desc}`}
+            >
+              <span
+                style={{
+                  fontSize: `${Math.round(tileSize * 0.68)}px`,
+                  lineHeight: 1,
+                  opacity: 0.9,
+                }}
+                aria-hidden="true"
+              >
+                {suitSymbol(tile.suit)}
+              </span>
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '2px',
+                  left: '4px',
+                  fontSize: `${Math.round(tileSize * 0.28)}px`,
+                  lineHeight: 1,
+                  fontWeight: '900',
+                  color: tileColor,
+                }}
+                aria-hidden="true"
+              >
+                {rankDisplay(displayRank)}
+              </span>
             </div>
           </td>
         );
@@ -3168,6 +3201,7 @@ function RunwabbleBoard({ board, selectedCells, onCellClick }) {
           <td key={`c-${c}`} style={{ padding: 0 }}>
             <div
               role="button"
+              className="card-tile"
               tabIndex={0}
               style={{ ...cellBaseStyle, cursor: 'pointer' }}
               aria-label={label}
