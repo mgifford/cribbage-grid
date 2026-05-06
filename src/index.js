@@ -1737,10 +1737,16 @@ class CribbageGame extends React.Component {
       const newRowTurn = !rowTurn;
       const currentScores = computeGridScores(cardLayout);
 
-      // Draw replacement cards from deck for the current player
+      // Draw replacement cards from deck for the current player.
+      // If passing (0 cards placed), discard the entire hand and draw a fresh one.
       let newDeck = deck.slice();
       const currentHand = rowTurn ? p1Hand : p2Hand;
-      const refilled = currentHand.slice();
+      let refilled;
+      if (cardsPlacedThisTurn === 0) {
+        refilled = [];
+      } else {
+        refilled = currentHand.slice();
+      }
       while (refilled.length < 5 && newDeck.length > 0) {
         refilled.push(newDeck[0]);
         newDeck = newDeck.slice(1);
@@ -1787,11 +1793,12 @@ class CribbageGame extends React.Component {
     const numPlayers = players.length;
     const newPlayerIndex = (currentPlayerIndex + 1) % numPlayers;
 
-    // Draw replacement cards from deck
+    // Draw replacement cards from deck.
+    // If passing (0 cards placed), discard the entire hand and draw a fresh one.
     let newDeck = this.state.deck.slice();
     const newHands = hands.map((h, idx) => {
       if (idx !== currentPlayerIndex) return h;
-      const refilled = h.slice();
+      const refilled = cardsPlacedThisTurn === 0 ? [] : h.slice();
       while (refilled.length < 5 && newDeck.length > 0) {
         refilled.push(newDeck[0]);
         newDeck = newDeck.slice(1);
@@ -2020,7 +2027,9 @@ class CribbageGame extends React.Component {
               Last turn – {lastTurnInfo.wasRowTurn ? resolvedP1Name : resolvedP2Name}
               {' '}({lastTurnInfo.wasRowTurn ? 'rows' : 'cols'}):
             </strong>{' '}
-            placed {lastTurnInfo.cardsPlaced} card{lastTurnInfo.cardsPlaced !== 1 ? 's' : ''}
+            {lastTurnInfo.cardsPlaced === 0
+              ? 'passed (discarded hand, drew new cards)'
+              : `placed ${lastTurnInfo.cardsPlaced} card${lastTurnInfo.cardsPlaced !== 1 ? 's' : ''}`}
             {' · '}Row pts: <strong>{lastTurnInfo.rowDelta > 0 ? `+${lastTurnInfo.rowDelta}` : lastTurnInfo.rowDelta}</strong>
             {' · '}Col pts: <strong>{lastTurnInfo.colDelta > 0 ? `+${lastTurnInfo.colDelta}` : lastTurnInfo.colDelta}</strong>
             {lastTurnInfo.bonusPoints > 0 && (
@@ -2161,7 +2170,9 @@ class CribbageGame extends React.Component {
             <strong>
               Last turn – {lastTurnInfo.playerName} ({lastTurnInfo.playerRole}):
             </strong>{' '}
-            placed {lastTurnInfo.cardsPlaced} card{lastTurnInfo.cardsPlaced !== 1 ? 's' : ''}
+            {lastTurnInfo.cardsPlaced === 0
+              ? 'passed (discarded hand, drew new cards)'
+              : `placed ${lastTurnInfo.cardsPlaced} card${lastTurnInfo.cardsPlaced !== 1 ? 's' : ''}`}
             {lastTurnInfo.scoreDelta !== 0 && (
               <>{' · '}Score: <strong>{lastTurnInfo.scoreDelta > 0 ? `+${lastTurnInfo.scoreDelta}` : lastTurnInfo.scoreDelta}</strong></>
             )}
@@ -2201,22 +2212,24 @@ class CribbageGame extends React.Component {
   }
 
   _renderEndTurnButton(cardsPlacedThisTurn) {
+    const isPassing = cardsPlacedThisTurn === 0;
     return (
       <div style={{ margin: '12px 0' }}>
         <button
           onClick={() => this.handleEndTurn()}
-          aria-label="End your turn and pass play to the next player"
+          aria-label={isPassing ? 'Pass your turn – discard your hand and draw new cards' : 'End your turn and pass play to the next player'}
           style={{
             padding: '10px 28px', fontSize: '16px', cursor: 'pointer',
             borderRadius: '6px', border: 'none',
-            backgroundColor: 'var(--btn-success-bg)', color: '#fff', fontWeight: 'bold',
+            backgroundColor: isPassing ? 'var(--btn-danger-bg)' : 'var(--btn-success-bg)',
+            color: '#fff', fontWeight: 'bold',
           }}
         >
-          End Turn {cardsPlacedThisTurn > 0 ? `(${cardsPlacedThisTurn} card${cardsPlacedThisTurn !== 1 ? 's' : ''} placed)` : ''}
+          {isPassing ? 'Pass Turn' : `End Turn (${cardsPlacedThisTurn} card${cardsPlacedThisTurn !== 1 ? 's' : ''} placed)`}
         </button>
-        {cardsPlacedThisTurn === 0 && (
+        {isPassing && (
           <span style={{ marginLeft: '10px', fontSize: '13px', color: 'var(--score-label-color)' }}>
-            Place at least one card before ending your turn.
+            No cards to play? Pass to discard your hand and draw fresh cards.
           </span>
         )}
       </div>
