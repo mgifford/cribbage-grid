@@ -1,8 +1,8 @@
 {
   "files": {
     "main.css": "/cribbage-grid/static/css/main.1a288e86.chunk.css",
-    "main.js": "/cribbage-grid/static/js/main.26ee0a81.chunk.js",
-    "main.js.map": "/cribbage-grid/static/js/main.26ee0a81.chunk.js.map",
+    "main.js": "/cribbage-grid/static/js/main.f92752c8.chunk.js",
+    "main.js.map": "/cribbage-grid/static/js/main.f92752c8.chunk.js.map",
     "runtime-main.js": "/cribbage-grid/static/js/runtime-main.10ba6e07.js",
     "runtime-main.js.map": "/cribbage-grid/static/js/runtime-main.10ba6e07.js.map",
     "static/js/2.e4ebbf2a.chunk.js": "/cribbage-grid/static/js/2.e4ebbf2a.chunk.js",
@@ -15,6 +15,6 @@
     "static/js/runtime-main.10ba6e07.js",
     "static/js/2.e4ebbf2a.chunk.js",
     "static/css/main.1a288e86.chunk.css",
-    "static/js/main.26ee0a81.chunk.js"
+    "static/js/main.f92752c8.chunk.js"
   ]
 }
