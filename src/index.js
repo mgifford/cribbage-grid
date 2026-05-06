@@ -7,8 +7,13 @@ import Slider from '@material-ui/core/Slider';
 import { QRCodeSVG } from 'qrcode.react';
 
 if (process.env.NODE_ENV !== 'production') {
-  const axe = require('@axe-core/react');
-  axe(React, ReactDOM, 1000);
+  try {
+    const axe = require('@axe-core/react');
+    axe(React, ReactDOM, 1000);
+  } catch (err) {
+    // Keep local dev usable on unsupported Node/Webpack combinations.
+    console.warn('Skipping @axe-core/react initialization:', err);
+  }
 }
 
 // =========================================================
