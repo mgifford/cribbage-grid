@@ -1831,6 +1831,7 @@ class CribbageGame extends React.Component {
       p1Hand: newHands[0],
       p2Hand: newHands[1] || [],
       rowTurn: newPlayerIndex === 0,
+      boardMask: this.state.boardMask,
     };
 
     this.setState(newState, () => { this._maybeTriggerCpu(newState); });
@@ -2072,9 +2073,16 @@ class CribbageGame extends React.Component {
       turnText = "Round Over – click deck (astronaut) for next round";
     } else {
       const role = currentPlayer ? currentPlayer.role : '';
-      turnText = currentPlayer && currentPlayer.type === 'cpu'
-        ? `CPU's Turn (${role}) – ${currentPlayer.name}`
-        : `${currentPlayer ? currentPlayer.name : 'Player'}'s Turn (${role})`;
+      if (currentPlayer && currentPlayer.type === 'cpu') {
+        if (cardsPlacedThisTurn > 0) {
+          const cardWord = cardsPlacedThisTurn === 1 ? 'card' : 'cards';
+          turnText = `CPU's Turn (${role}) – ${currentPlayer.name} – Placed ${cardsPlacedThisTurn} ${cardWord}…`;
+        } else {
+          turnText = `CPU's Turn (${role}) – ${currentPlayer.name} – Thinking…`;
+        }
+      } else {
+        turnText = `${currentPlayer ? currentPlayer.name : 'Player'}'s Turn (${role})`;
+      }
     }
 
     const currentHand = hands && hands[currentPlayerIndex];
